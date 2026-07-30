@@ -59,7 +59,7 @@ export const POST = async (request: Request) => {
           const product = getProduct(product_id);
           if (!product) return { error: `unknown product: ${product_id}` };
           return {
-            cart: addToCart({
+            cart: await addToCart({
               product_id: product.id,
               name: product.name,
               price: product.price,
@@ -71,7 +71,7 @@ export const POST = async (request: Request) => {
       view_cart: tool({
         description: "Show the current cart contents.",
         inputSchema: z.object({}),
-        execute: async () => ({ cart: getCart() }),
+        execute: async () => ({ cart: await getCart() }),
       }),
       remove_from_cart: tool({
         description: "Remove a product from the cart (all of it, or just `qty` units).",
@@ -80,14 +80,14 @@ export const POST = async (request: Request) => {
           qty: z.number().int().positive().optional(),
         }),
         execute: async ({ product_id, qty }) => ({
-          cart: removeFromCart(product_id, qty),
+          cart: await removeFromCart(product_id, qty),
         }),
       }),
       clear_cart: tool({
         description: "Empty the cart entirely.",
         inputSchema: z.object({}),
         execute: async () => {
-          clearCart();
+          await clearCart();
           return { cart: [] };
         },
       }),
@@ -102,14 +102,14 @@ export const POST = async (request: Request) => {
             .describe("Chosen stablecoin's contract address, from payment_options."),
         }),
         execute: async ({ chain_id, token_address }) => {
-          const cart = getCart();
+          const cart = await getCart();
           if (cart.length === 0) return { error: "cart is empty" };
           const { order, rail0_id } = await placeAndPayOrder(
             cart.map((l) => ({ product_id: l.product_id, qty: l.qty })),
             chain_id,
             token_address,
           );
-          clearCart();
+          await clearCart();
           return {
             order_id: order.id,
             state: order.state,

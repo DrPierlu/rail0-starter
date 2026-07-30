@@ -71,9 +71,12 @@ API key.
 4. **Run.**
 
    ```bash
-   pnpm install
-   pnpm dev
+   bin/dev
    ```
+
+   (`bin/dev` seeds `.env.local` from the example on first run, installs
+   dependencies, and warns if no gateway is answering. Equivalent by hand:
+   `pnpm install && pnpm dev`.)
 
    Open [http://localhost:3000](http://localhost:3000), ask the agent to shop,
    then capture the order on [http://localhost:3000/merchant](http://localhost:3000/merchant).
@@ -86,10 +89,26 @@ pnpm lint        # Biome (lint + format check); pnpm lint:fix to write
 pnpm test        # Vitest unit tests
 ```
 
+## Deploying to Vercel
+
+1. Push the repo to GitHub and import it in Vercel (the SDK tarball in
+   `vendor/` makes the install self-contained).
+2. Add a Redis store: the file store cannot work on Vercel's ephemeral
+   filesystem, so attach an Upstash Redis (Vercel Marketplace) or set
+   `KV_REST_API_URL` + `KV_REST_API_TOKEN` (also accepted:
+   `UPSTASH_REDIS_REST_URL`/`_TOKEN`). When those are present the order/cart
+   store automatically lives in a single Redis key instead of `.data/`.
+3. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
+   `BUYER_PRIVATE_KEY`, `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`
+   (`APP_URL` is derived from the Vercel production URL automatically).
+4. Make sure the seller wallet is registered as a payee on that gateway with
+   its tokens active and holds gas, and the buyer wallet holds the stablecoin.
+
 ## Notes for a real integration
 
-- **Order store**: `.data/store.json` is a deliberately tiny single-user
-  file store — swap `src/lib/store.ts` for a real database.
+- **Order store**: a deliberately tiny single-user document store
+  (`.data/store.json` locally, one Redis key on Vercel) with no locking —
+  swap `src/lib/store.ts` for a real database.
 - **Keys in env vars** are demo-grade. In production the buyer key belongs in
   the buyer's own wallet (the whole point of rail0 is that the gateway never
   custodies keys), and the seller key in a proper secret store or signer.

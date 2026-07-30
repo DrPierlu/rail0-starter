@@ -22,7 +22,8 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    const orders = await Promise.all(listOrders().map((o) => refreshOrder(o.id)));
+    const stored = await listOrders();
+    const orders = await Promise.all(stored.map((o) => refreshOrder(o.id)));
     return NextResponse.json({ orders });
   } catch (error) {
     return errorResponse(error);
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
     const total = fromCents(totalCents);
 
-    const order = createOrder(lines, total, toBaseUnits(total, method.decimals), {
+    const order = await createOrder(lines, total, toBaseUnits(total, method.decimals), {
       chain_id: method.chain_id,
       chain_name: method.chain_name,
       symbol: method.symbol,

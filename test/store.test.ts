@@ -35,53 +35,53 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-beforeEach(() => {
-  clearCart();
+beforeEach(async () => {
+  await clearCart();
 });
 
 describe("cart", () => {
-  it("adds, merges, removes and clears lines", () => {
-    addToCart({ product_id: "a", name: "A", price: "1.00", qty: 1 });
-    addToCart({ product_id: "a", name: "A", price: "1.00", qty: 2 });
-    addToCart({ product_id: "b", name: "B", price: "2.00", qty: 1 });
-    expect(getCart()).toHaveLength(2);
-    expect(getCart().find((l) => l.product_id === "a")?.qty).toBe(3);
+  it("adds, merges, removes and clears lines", async () => {
+    await addToCart({ product_id: "a", name: "A", price: "1.00", qty: 1 });
+    await addToCart({ product_id: "a", name: "A", price: "1.00", qty: 2 });
+    await addToCart({ product_id: "b", name: "B", price: "2.00", qty: 1 });
+    expect(await getCart()).toHaveLength(2);
+    expect((await getCart()).find((l) => l.product_id === "a")?.qty).toBe(3);
 
-    removeFromCart("a", 1);
-    expect(getCart().find((l) => l.product_id === "a")?.qty).toBe(2);
-    removeFromCart("a");
-    expect(getCart().find((l) => l.product_id === "a")).toBeUndefined();
+    await removeFromCart("a", 1);
+    expect((await getCart()).find((l) => l.product_id === "a")?.qty).toBe(2);
+    await removeFromCart("a");
+    expect((await getCart()).find((l) => l.product_id === "a")).toBeUndefined();
 
-    clearCart();
-    expect(getCart()).toHaveLength(0);
+    await clearCart();
+    expect(await getCart()).toHaveLength(0);
   });
 });
 
 describe("orders", () => {
-  it("creates orders in awaiting_payment and finds them by id or rail0_id", () => {
-    const order = createOrder(
+  it("creates orders in awaiting_payment and finds them by id or rail0_id", async () => {
+    const order = await createOrder(
       [{ product_id: "a", name: "A", price: "1.00", qty: 2 }],
       "2.00",
       "2000000",
       TOKEN,
     );
     expect(order.state).toBe("awaiting_payment");
-    expect(getOrder(order.id)?.id).toBe(order.id);
+    expect((await getOrder(order.id))?.id).toBe(order.id);
 
     const rail0Id = `0x${"ab".repeat(32)}`;
-    updateOrder(order.id, { rail0_id: rail0Id, state: "authorizing" });
-    expect(getOrder(rail0Id)?.id).toBe(order.id);
-    expect(getOrder(order.id)?.state).toBe("authorizing");
+    await updateOrder(order.id, { rail0_id: rail0Id, state: "authorizing" });
+    expect((await getOrder(rail0Id))?.id).toBe(order.id);
+    expect((await getOrder(order.id))?.state).toBe("authorizing");
   });
 
-  it("lists orders newest first", () => {
-    const first = createOrder([], "1.00", "1000000", TOKEN);
-    const second = createOrder([], "2.00", "2000000", TOKEN);
-    const ids = listOrders().map((o) => o.id);
+  it("lists orders newest first", async () => {
+    const first = await createOrder([], "1.00", "1000000", TOKEN);
+    const second = await createOrder([], "2.00", "2000000", TOKEN);
+    const ids = (await listOrders()).map((o) => o.id);
     expect(ids.indexOf(second.id)).toBeLessThan(ids.indexOf(first.id));
   });
 
-  it("returns undefined when updating a missing order", () => {
-    expect(updateOrder("missing", { state: "settled" })).toBeUndefined();
+  it("returns undefined when updating a missing order", async () => {
+    expect(await updateOrder("missing", { state: "settled" })).toBeUndefined();
   });
 });

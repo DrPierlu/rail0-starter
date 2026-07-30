@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// A deliberately tiny single-user persistence layer: one JSON file holding the
-// cart and the orders, atomically rewritten on every change. This is demo
-// plumbing — swap it for a real database in anything beyond a starter.
+// A deliberately tiny single-user persistence layer: one JSON document holding
+// the cart and the orders, rewritten on every change, behind a pluggable
+// driver. Local dev uses a file (.data/store.json); when Redis REST
+// credentials are present (Vercel KV / Upstash / Redis Cloud on Vercel) the
+// same document lives in a single Redis key instead, which is what makes the
+// template deployable on Vercel's ephemeral filesystem. Mutations are
+// read-modify-write with no locking — fine for a demo, not for production.
 
 export type OrderState =
   | "awaiting_payment" // order created, no payment attached yet
@@ -52,48 +56,99 @@ interface StoreData {
   orders: Order[];
 }
 
+const EMPTY: StoreData = { cart: [], orders: [] };
+
+interface StoreDriver {
+  read(): Promise<StoreData>;
+  write(data: StoreData): Promise<void>;
+}
+
+// ── File driver (local dev) ──────────────────────────────────────────
+
 // Resolved lazily so tests can point the store at a temp directory by
 // changing the working directory before the first call.
 function dataFile(): string {
   return path.join(process.cwd(), ".data", "store.json");
 }
 
-function load(): StoreData {
-  try {
-    return JSON.parse(readFileSync(dataFile(), "utf8")) as StoreData;
-  } catch {
-    return { cart: [], orders: [] };
-  }
+const fileDriver: StoreDriver = {
+  async read() {
+    try {
+      return JSON.parse(readFileSync(dataFile(), "utf8")) as StoreData;
+    } catch {
+      return structuredClone(EMPTY);
+    }
+  },
+  async write(data) {
+    const file = dataFile();
+    mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    writeFileSync(tmp, JSON.stringify(data, null, 2));
+    renameSync(tmp, file);
+  },
+};
+
+// ── Redis REST driver (Vercel KV / Upstash) ──────────────────────────
+
+const REDIS_KEY = "rail0-starter:store";
+
+function redisCredentials(): { url: string; token: string } | null {
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token ? { url, token } : null;
 }
 
-function save(data: StoreData): void {
-  const file = dataFile();
-  mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  writeFileSync(tmp, JSON.stringify(data, null, 2));
-  renameSync(tmp, file);
+// Single-command Upstash REST call: POST the command as a JSON array.
+async function redis(command: unknown[]): Promise<unknown> {
+  const { url, token } = redisCredentials() as { url: string; token: string };
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(command),
+  });
+  const body = (await response.json()) as { result?: unknown; error?: string };
+  if (!response.ok || body.error) {
+    throw new Error(`store redis error: ${body.error ?? response.status}`);
+  }
+  return body.result;
+}
+
+const redisDriver: StoreDriver = {
+  async read() {
+    const raw = (await redis(["GET", REDIS_KEY])) as string | null;
+    return raw ? (JSON.parse(raw) as StoreData) : structuredClone(EMPTY);
+  },
+  async write(data) {
+    await redis(["SET", REDIS_KEY, JSON.stringify(data)]);
+  },
+};
+
+function driver(): StoreDriver {
+  return redisCredentials() ? redisDriver : fileDriver;
 }
 
 // ── Cart ─────────────────────────────────────────────────────────────
 
-export function getCart(): CartLine[] {
-  return load().cart;
+export async function getCart(): Promise<CartLine[]> {
+  return (await driver().read()).cart;
 }
 
-export function addToCart(line: CartLine): CartLine[] {
-  const data = load();
+export async function addToCart(line: CartLine): Promise<CartLine[]> {
+  const store = driver();
+  const data = await store.read();
   const existing = data.cart.find((l) => l.product_id === line.product_id);
   if (existing) {
     existing.qty += line.qty;
   } else {
     data.cart.push(line);
   }
-  save(data);
+  await store.write(data);
   return data.cart;
 }
 
-export function removeFromCart(productId: string, qty?: number): CartLine[] {
-  const data = load();
+export async function removeFromCart(productId: string, qty?: number): Promise<CartLine[]> {
+  const store = driver();
+  const data = await store.read();
   const line = data.cart.find((l) => l.product_id === productId);
   if (line) {
     line.qty -= qty ?? line.qty;
@@ -101,25 +156,27 @@ export function removeFromCart(productId: string, qty?: number): CartLine[] {
       data.cart = data.cart.filter((l) => l.product_id !== productId);
     }
   }
-  save(data);
+  await store.write(data);
   return data.cart;
 }
 
-export function clearCart(): void {
-  const data = load();
+export async function clearCart(): Promise<void> {
+  const store = driver();
+  const data = await store.read();
   data.cart = [];
-  save(data);
+  await store.write(data);
 }
 
 // ── Orders ───────────────────────────────────────────────────────────
 
-export function createOrder(
+export async function createOrder(
   lines: CartLine[],
   total: string,
   totalBase: string,
   token: OrderToken,
-): Order {
-  const data = load();
+): Promise<Order> {
+  const store = driver();
+  const data = await store.read();
   const now = new Date().toISOString();
   const order: Order = {
     id: randomUUID().slice(0, 8),
@@ -132,26 +189,27 @@ export function createOrder(
     updated_at: now,
   };
   data.orders.unshift(order);
-  save(data);
+  await store.write(data);
   return order;
 }
 
-export function getOrder(id: string): Order | undefined {
-  return load().orders.find((o) => o.id === id || o.rail0_id === id);
+export async function getOrder(id: string): Promise<Order | undefined> {
+  return (await driver().read()).orders.find((o) => o.id === id || o.rail0_id === id);
 }
 
-export function listOrders(): Order[] {
-  return load().orders;
+export async function listOrders(): Promise<Order[]> {
+  return (await driver().read()).orders;
 }
 
-export function updateOrder(
+export async function updateOrder(
   id: string,
   patch: Partial<Omit<Order, "id" | "created_at">>,
-): Order | undefined {
-  const data = load();
+): Promise<Order | undefined> {
+  const store = driver();
+  const data = await store.read();
   const order = data.orders.find((o) => o.id === id);
   if (!order) return undefined;
   Object.assign(order, patch, { updated_at: new Date().toISOString() });
-  save(data);
+  await store.write(data);
   return order;
 }

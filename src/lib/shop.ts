@@ -59,7 +59,7 @@ export async function listPaymentMethods(): Promise<PaymentMethod[]> {
  * the request body.
  */
 export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string): Promise<Order> {
-  const order = getOrder(orderId);
+  const order = await getOrder(orderId);
   if (!order) throw new ShopError(404, "order not found");
   if (order.state !== "awaiting_payment") {
     throw new ShopError(409, `order is ${order.state}, expected awaiting_payment`);
@@ -101,7 +101,7 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
     ),
   });
 
-  return applyOrder(order.id, {
+  return await applyOrder(order.id, {
     rail0_id: rail0Id,
     state: "authorizing",
     payment_status: payment.status,
@@ -110,7 +110,7 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
 
 /** Capture the full escrowed amount — the merchant settles after fulfilment. */
 export async function captureOrder(orderId: string): Promise<Order> {
-  const order = requireOrderInState(orderId, "in_escrow");
+  const order = await requireOrderInState(orderId, "in_escrow");
   const seller = await clientFor("seller");
   // capture/refund prepare, like create, take the HUMAN decimal amount.
   const prep = await seller.payments.capturePrepare(order.rail0_id, order.total);
@@ -123,12 +123,12 @@ export async function captureOrder(orderId: string): Promise<Order> {
       env().SELLER_PRIVATE_KEY as `0x${string}`,
     ),
   });
-  return applyOrder(order.id, { state: "capturing" });
+  return await applyOrder(order.id, { state: "capturing" });
 }
 
 /** Void the authorization — cancels the order and returns the escrow to the buyer. */
 export async function voidOrder(orderId: string): Promise<Order> {
-  const order = requireOrderInState(orderId, "in_escrow");
+  const order = await requireOrderInState(orderId, "in_escrow");
   const seller = await clientFor("seller");
   const prep = await seller.payments.voidPrepare(order.rail0_id);
   if (!prep.unsigned_transaction) {
@@ -140,7 +140,7 @@ export async function voidOrder(orderId: string): Promise<Order> {
       env().SELLER_PRIVATE_KEY as `0x${string}`,
     ),
   });
-  return applyOrder(order.id, { state: "voiding" });
+  return await applyOrder(order.id, { state: "voiding" });
 }
 
 /**
@@ -155,7 +155,7 @@ export async function voidOrder(orderId: string): Promise<Order> {
  * `failed` with the decoded on-chain error.
  */
 export async function refreshOrder(orderId: string): Promise<Order> {
-  const order = getOrder(orderId);
+  const order = await getOrder(orderId);
   if (!order) throw new ShopError(404, "order not found");
   const completions = REFRESHABLE[order.state];
   if (!order.rail0_id || !completions) return order;
@@ -165,7 +165,7 @@ export async function refreshOrder(orderId: string): Promise<Order> {
 
   const nextState = completions[payment.status];
   if (nextState) {
-    return applyOrder(order.id, {
+    return await applyOrder(order.id, {
       state: nextState,
       payment_status: payment.status,
     });
@@ -173,14 +173,14 @@ export async function refreshOrder(orderId: string): Promise<Order> {
 
   const failure = failureFor(payment, IN_FLIGHT_OPERATION[order.state]);
   if (failure) {
-    return applyOrder(order.id, {
+    return await applyOrder(order.id, {
       state: "failed",
       payment_status: payment.status,
       error: failure,
     });
   }
 
-  return applyOrder(order.id, { payment_status: payment.status });
+  return await applyOrder(order.id, { payment_status: payment.status });
 }
 
 // Per-state completion map: which payment statuses move the order forward
@@ -223,8 +223,8 @@ function failureFor(payment: PaymentDetail, operation?: string): string | undefi
 
 type EscrowedOrder = Order & { rail0_id: string };
 
-function requireOrderInState(orderId: string, state: OrderState): EscrowedOrder {
-  const order = getOrder(orderId);
+async function requireOrderInState(orderId: string, state: OrderState): Promise<EscrowedOrder> {
+  const order = await getOrder(orderId);
   if (!order) throw new ShopError(404, "order not found");
   if (order.state !== state || !order.rail0_id) {
     throw new ShopError(409, `order is ${order.state}, expected ${state}`);
@@ -234,8 +234,8 @@ function requireOrderInState(orderId: string, state: OrderState): EscrowedOrder 
 
 // updateOrder returns undefined only for an unknown id; every caller here has
 // just loaded the order, so absence is a store bug worth failing loudly on.
-function applyOrder(id: string, patch: Parameters<typeof updateOrder>[1]): Order {
-  const updated = updateOrder(id, patch);
+async function applyOrder(id: string, patch: Parameters<typeof updateOrder>[1]): Promise<Order> {
+  const updated = await updateOrder(id, patch);
   if (!updated) throw new ShopError(500, "order disappeared from the store");
   return updated;
 }

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Dev launcher: seeds .env.local on first run, installs dependencies, sanity-
+# checks the gateway, then starts the Next.js dev server.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ ! -f .env.local ]; then
+  cp .env.example .env.local
+  echo "Created .env.local from .env.example."
+  echo "Fill in BUYER_PRIVATE_KEY, SELLER_PRIVATE_KEY and ANTHROPIC_API_KEY, then run bin/dev again."
+  exit 1
+fi
+
+missing=$(grep -E '^(BUYER_PRIVATE_KEY|SELLER_PRIVATE_KEY|ANTHROPIC_API_KEY)=\s*$' .env.local | cut -d= -f1 || true)
+if [ -n "$missing" ]; then
+  echo "Missing values in .env.local:"
+  echo "$missing" | sed 's/^/  - /'
+  exit 1
+fi
+
+if [ ! -d node_modules ]; then
+  pnpm install
+fi
+
+gateway_url=$(grep -E '^GATEWAY_URL=' .env.local | cut -d= -f2-)
+gateway_url=${gateway_url:-http://localhost:9292}
+if ! curl -sf -m 3 "$gateway_url/health" > /dev/null 2>&1; then
+  echo "warning: no rail0 gateway answering at $gateway_url"
+  echo "         (local stack: run bin/dev in rail0-gateway first)"
+fi
+
+exec pnpm dev
