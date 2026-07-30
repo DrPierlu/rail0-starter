@@ -1,0 +1,240 @@
+import { type PaymentDetail, signTransaction } from "@rail0/sdk";
+import { env } from "./env";
+import { addressFor, clientFor } from "./rail0";
+import { getOrder, type Order, type OrderState, updateOrder } from "./store";
+
+// Seller-side orchestration: everything the merchant does against the rail0
+// gateway (discover accepted tokens, escrow the buyer's signed payment,
+// capture or void it) lives here so the API routes stay thin.
+
+export interface PaymentMethod {
+  chain_id: number;
+  chain_name?: string;
+  symbol: string;
+  address: string;
+  decimals: number;
+}
+
+/**
+ * The merchant's accepted chain/token pairs. Read from the gateway's public
+ * buyer-discovery endpoint (GET /payment_methods?address=…) — never hardcoded:
+ * what the merchant accepts is configured on the gateway, not in this repo.
+ */
+export async function listPaymentMethods(): Promise<PaymentMethod[]> {
+  const seller = await clientFor("seller");
+  const [wallets, chains] = await Promise.all([
+    seller.paymentMethods.list({ address: addressFor("seller") }),
+    seller.chains.list(),
+  ]);
+  const chainNames = new Map(chains.map((c) => [c.chain_id ?? 0, c.name ?? ""]));
+  const methods: PaymentMethod[] = [];
+  for (const wallet of wallets) {
+    for (const holding of wallet.tokens ?? []) {
+      const token = holding.token;
+      if (!holding.active || !token?.active) continue;
+      if (
+        token.chain_id === undefined ||
+        token.address === undefined ||
+        token.symbol === undefined ||
+        token.decimals === undefined
+      )
+        continue;
+      methods.push({
+        chain_id: token.chain_id,
+        chain_name: chainNames.get(token.chain_id),
+        symbol: token.symbol,
+        address: token.address,
+        decimals: token.decimals,
+      });
+    }
+  }
+  return methods;
+}
+
+/**
+ * Attach the buyer's signed payment to an order and immediately move the funds
+ * into escrow. Verifies on the gateway that the payment really is what the
+ * order asked for (right payee, amount, token, chain, and payer-signed) before
+ * broadcasting the authorize — the order's source of truth is the gateway, not
+ * the request body.
+ */
+export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string): Promise<Order> {
+  const order = getOrder(orderId);
+  if (!order) throw new ShopError(404, "order not found");
+  if (order.state !== "awaiting_payment") {
+    throw new ShopError(409, `order is ${order.state}, expected awaiting_payment`);
+  }
+
+  const seller = await clientFor("seller");
+  const payment = await seller.payments.get(rail0Id);
+
+  if (payment.payee.toLowerCase() !== addressFor("seller").toLowerCase()) {
+    throw new ShopError(422, "payment payee is not this merchant");
+  }
+  if (payment.chain_id !== order.token.chain_id) {
+    throw new ShopError(422, "payment chain does not match the order");
+  }
+  if (payment.token.toLowerCase() !== order.token.address.toLowerCase()) {
+    throw new ShopError(422, "payment token does not match the order");
+  }
+  if (payment.amount !== order.total_base) {
+    throw new ShopError(
+      422,
+      `payment amount ${payment.amount} does not match order total ${order.total_base}`,
+    );
+  }
+  if (payment.mode !== "authorize") {
+    throw new ShopError(422, "payment mode must be authorize (escrow)");
+  }
+  if (payment.status !== "signed") {
+    throw new ShopError(422, `payment is ${payment.status}, expected signed`);
+  }
+
+  const prep = await seller.payments.authorizePrepare(rail0Id);
+  if (!prep.unsigned_transaction) {
+    throw new ShopError(502, "gateway returned no unsigned authorize transaction");
+  }
+  await seller.payments.authorize(rail0Id, {
+    signed_transaction: signTransaction(
+      prep.unsigned_transaction,
+      env().SELLER_PRIVATE_KEY as `0x${string}`,
+    ),
+  });
+
+  return applyOrder(order.id, {
+    rail0_id: rail0Id,
+    state: "authorizing",
+    payment_status: payment.status,
+  });
+}
+
+/** Capture the full escrowed amount — the merchant settles after fulfilment. */
+export async function captureOrder(orderId: string): Promise<Order> {
+  const order = requireOrderInState(orderId, "in_escrow");
+  const seller = await clientFor("seller");
+  const prep = await seller.payments.capturePrepare(order.rail0_id, order.total_base);
+  if (!prep.unsigned_transaction) {
+    throw new ShopError(502, "gateway returned no unsigned capture transaction");
+  }
+  await seller.payments.capture(order.rail0_id, {
+    signed_transaction: signTransaction(
+      prep.unsigned_transaction,
+      env().SELLER_PRIVATE_KEY as `0x${string}`,
+    ),
+  });
+  return applyOrder(order.id, { state: "capturing" });
+}
+
+/** Void the authorization — cancels the order and returns the escrow to the buyer. */
+export async function voidOrder(orderId: string): Promise<Order> {
+  const order = requireOrderInState(orderId, "in_escrow");
+  const seller = await clientFor("seller");
+  const prep = await seller.payments.voidPrepare(order.rail0_id);
+  if (!prep.unsigned_transaction) {
+    throw new ShopError(502, "gateway returned no unsigned void transaction");
+  }
+  await seller.payments.void(order.rail0_id, {
+    signed_transaction: signTransaction(
+      prep.unsigned_transaction,
+      env().SELLER_PRIVATE_KEY as `0x${string}`,
+    ),
+  });
+  return applyOrder(order.id, { state: "voiding" });
+}
+
+/**
+ * Lazily sync an order with the gateway: while an on-chain operation is in
+ * flight (authorizing/capturing/voiding) each read re-fetches the payment and
+ * advances the order when the operation confirms — or parks it in `failed`
+ * with the decoded on-chain error when it doesn't. No background jobs.
+ */
+export async function refreshOrder(orderId: string): Promise<Order> {
+  const order = getOrder(orderId);
+  if (!order) throw new ShopError(404, "order not found");
+  if (!order.rail0_id || !TRANSITIONAL.has(order.state)) return order;
+
+  const seller = await clientFor("seller");
+  const payment = await seller.payments.get(order.rail0_id);
+
+  // A terminal payment status always wins; only when the payment is still in
+  // the pre-transition status do we look for a failed tx of the in-flight
+  // operation to park the order in `failed`.
+  const nextState = STATUS_TO_STATE[payment.status];
+  if (nextState) {
+    return applyOrder(order.id, {
+      state: nextState,
+      payment_status: payment.status,
+    });
+  }
+
+  const failure = failureFor(payment, IN_FLIGHT_OPERATION[order.state]);
+  if (failure) {
+    return applyOrder(order.id, {
+      state: "failed",
+      payment_status: payment.status,
+      error: failure,
+    });
+  }
+
+  return applyOrder(order.id, { payment_status: payment.status });
+}
+
+const TRANSITIONAL = new Set<OrderState>(["authorizing", "capturing", "voiding"]);
+
+// Payment statuses that end a transition. In-flight statuses (signed while the
+// authorize is still pending) keep the current transitional state.
+const STATUS_TO_STATE: Partial<Record<string, OrderState>> = {
+  authorized: "in_escrow",
+  captured: "settled",
+  partially_captured: "in_escrow",
+  voided: "cancelled",
+  released: "cancelled",
+};
+
+const IN_FLIGHT_OPERATION: Partial<Record<OrderState, string>> = {
+  authorizing: "authorize",
+  capturing: "capture",
+  voiding: "void",
+};
+
+function failureFor(payment: PaymentDetail, operation?: string): string | undefined {
+  if (!operation) return undefined;
+  const failed = (payment.transactions ?? []).find(
+    (t) => t.operation === operation && t.status === "failed",
+  );
+  if (!failed) return undefined;
+  return (
+    failed.error_message ??
+    failed.error_code ??
+    payment.last_error_message ??
+    "on-chain operation failed"
+  );
+}
+
+type EscrowedOrder = Order & { rail0_id: string };
+
+function requireOrderInState(orderId: string, state: OrderState): EscrowedOrder {
+  const order = getOrder(orderId);
+  if (!order) throw new ShopError(404, "order not found");
+  if (order.state !== state || !order.rail0_id) {
+    throw new ShopError(409, `order is ${order.state}, expected ${state}`);
+  }
+  return order as EscrowedOrder;
+}
+
+// updateOrder returns undefined only for an unknown id; every caller here has
+// just loaded the order, so absence is a store bug worth failing loudly on.
+function applyOrder(id: string, patch: Parameters<typeof updateOrder>[1]): Order {
+  const updated = updateOrder(id, patch);
+  if (!updated) throw new ShopError(500, "order disappeared from the store");
+  return updated;
+}
+
+export class ShopError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}

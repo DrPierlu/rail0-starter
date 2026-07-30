@@ -1,0 +1,707 @@
+{
+  "merchant": {
+    "name": "Acme Apparel Co."
+  },
+  "products": [
+    {
+      "id": "tshirts-classic",
+      "name": "Classic Tee",
+      "description": "Classic tee \u2014 t-shirts.",
+      "price": "2.60",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-slim",
+      "name": "Slim-Fit Tee",
+      "description": "Slim-Fit tee \u2014 t-shirts.",
+      "price": "1.89",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-oversized",
+      "name": "Oversized Tee",
+      "description": "Oversized tee \u2014 t-shirts.",
+      "price": "2.78",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-vintage",
+      "name": "Vintage Tee",
+      "description": "Vintage tee \u2014 t-shirts.",
+      "price": "3.67",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-relaxed",
+      "name": "Relaxed Tee",
+      "description": "Relaxed tee \u2014 t-shirts.",
+      "price": "4.56",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-premium",
+      "name": "Premium Tee",
+      "description": "Premium tee \u2014 t-shirts.",
+      "price": "5.45",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-organic",
+      "name": "Organic Tee",
+      "description": "Organic tee \u2014 t-shirts.",
+      "price": "6.34",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-striped",
+      "name": "Striped Tee",
+      "description": "Striped tee \u2014 t-shirts.",
+      "price": "7.23",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-heavyweight",
+      "name": "Heavyweight Tee",
+      "description": "Heavyweight tee \u2014 t-shirts.",
+      "price": "8.12",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-everyday",
+      "name": "Everyday Tee",
+      "description": "Everyday tee \u2014 t-shirts.",
+      "price": "9.01",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "hoodies-classic",
+      "name": "Classic Hoodie",
+      "description": "Classic hoodie \u2014 hoodies.",
+      "price": "9.90",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-slim",
+      "name": "Slim-Fit Hoodie",
+      "description": "Slim-Fit hoodie \u2014 hoodies.",
+      "price": "1.78",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-oversized",
+      "name": "Oversized Hoodie",
+      "description": "Oversized hoodie \u2014 hoodies.",
+      "price": "2.67",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-vintage",
+      "name": "Vintage Hoodie",
+      "description": "Vintage hoodie \u2014 hoodies.",
+      "price": "3.56",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-relaxed",
+      "name": "Relaxed Hoodie",
+      "description": "Relaxed hoodie \u2014 hoodies.",
+      "price": "4.45",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-premium",
+      "name": "Premium Hoodie",
+      "description": "Premium hoodie \u2014 hoodies.",
+      "price": "5.34",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-organic",
+      "name": "Organic Hoodie",
+      "description": "Organic hoodie \u2014 hoodies.",
+      "price": "6.23",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-striped",
+      "name": "Striped Hoodie",
+      "description": "Striped hoodie \u2014 hoodies.",
+      "price": "7.12",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-heavyweight",
+      "name": "Heavyweight Hoodie",
+      "description": "Heavyweight hoodie \u2014 hoodies.",
+      "price": "8.01",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-everyday",
+      "name": "Everyday Hoodie",
+      "description": "Everyday hoodie \u2014 hoodies.",
+      "price": "8.90",
+      "category": "Hoodies"
+    },
+    {
+      "id": "sweaters-classic",
+      "name": "Classic Sweater",
+      "description": "Classic sweater \u2014 sweaters.",
+      "price": "9.79",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-slim",
+      "name": "Slim-Fit Sweater",
+      "description": "Slim-Fit sweater \u2014 sweaters.",
+      "price": "1.67",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-oversized",
+      "name": "Oversized Sweater",
+      "description": "Oversized sweater \u2014 sweaters.",
+      "price": "2.56",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-vintage",
+      "name": "Vintage Sweater",
+      "description": "Vintage sweater \u2014 sweaters.",
+      "price": "3.45",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-relaxed",
+      "name": "Relaxed Sweater",
+      "description": "Relaxed sweater \u2014 sweaters.",
+      "price": "4.34",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-premium",
+      "name": "Premium Sweater",
+      "description": "Premium sweater \u2014 sweaters.",
+      "price": "5.23",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-organic",
+      "name": "Organic Sweater",
+      "description": "Organic sweater \u2014 sweaters.",
+      "price": "6.12",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-striped",
+      "name": "Striped Sweater",
+      "description": "Striped sweater \u2014 sweaters.",
+      "price": "7.01",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-heavyweight",
+      "name": "Heavyweight Sweater",
+      "description": "Heavyweight sweater \u2014 sweaters.",
+      "price": "7.90",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-everyday",
+      "name": "Everyday Sweater",
+      "description": "Everyday sweater \u2014 sweaters.",
+      "price": "8.79",
+      "category": "Sweaters"
+    },
+    {
+      "id": "shirts-classic",
+      "name": "Classic Shirt",
+      "description": "Classic shirt \u2014 shirts.",
+      "price": "9.68",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-slim",
+      "name": "Slim-Fit Shirt",
+      "description": "Slim-Fit shirt \u2014 shirts.",
+      "price": "1.56",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-oversized",
+      "name": "Oversized Shirt",
+      "description": "Oversized shirt \u2014 shirts.",
+      "price": "2.45",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-vintage",
+      "name": "Vintage Shirt",
+      "description": "Vintage shirt \u2014 shirts.",
+      "price": "3.34",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-relaxed",
+      "name": "Relaxed Shirt",
+      "description": "Relaxed shirt \u2014 shirts.",
+      "price": "4.23",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-premium",
+      "name": "Premium Shirt",
+      "description": "Premium shirt \u2014 shirts.",
+      "price": "5.12",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-organic",
+      "name": "Organic Shirt",
+      "description": "Organic shirt \u2014 shirts.",
+      "price": "6.01",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-striped",
+      "name": "Striped Shirt",
+      "description": "Striped shirt \u2014 shirts.",
+      "price": "6.90",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-heavyweight",
+      "name": "Heavyweight Shirt",
+      "description": "Heavyweight shirt \u2014 shirts.",
+      "price": "7.79",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-everyday",
+      "name": "Everyday Shirt",
+      "description": "Everyday shirt \u2014 shirts.",
+      "price": "8.68",
+      "category": "Shirts"
+    },
+    {
+      "id": "jeans-classic",
+      "name": "Classic Jeans",
+      "description": "Classic jeans \u2014 jeans.",
+      "price": "9.57",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-slim",
+      "name": "Slim-Fit Jeans",
+      "description": "Slim-Fit jeans \u2014 jeans.",
+      "price": "1.45",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-oversized",
+      "name": "Oversized Jeans",
+      "description": "Oversized jeans \u2014 jeans.",
+      "price": "2.34",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-vintage",
+      "name": "Vintage Jeans",
+      "description": "Vintage jeans \u2014 jeans.",
+      "price": "3.23",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-relaxed",
+      "name": "Relaxed Jeans",
+      "description": "Relaxed jeans \u2014 jeans.",
+      "price": "4.12",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-premium",
+      "name": "Premium Jeans",
+      "description": "Premium jeans \u2014 jeans.",
+      "price": "5.01",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-organic",
+      "name": "Organic Jeans",
+      "description": "Organic jeans \u2014 jeans.",
+      "price": "5.90",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-striped",
+      "name": "Striped Jeans",
+      "description": "Striped jeans \u2014 jeans.",
+      "price": "6.79",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-heavyweight",
+      "name": "Heavyweight Jeans",
+      "description": "Heavyweight jeans \u2014 jeans.",
+      "price": "7.68",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-everyday",
+      "name": "Everyday Jeans",
+      "description": "Everyday jeans \u2014 jeans.",
+      "price": "8.57",
+      "category": "Jeans"
+    },
+    {
+      "id": "shorts-classic",
+      "name": "Classic Shorts",
+      "description": "Classic shorts \u2014 shorts.",
+      "price": "9.46",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-slim",
+      "name": "Slim-Fit Shorts",
+      "description": "Slim-Fit shorts \u2014 shorts.",
+      "price": "1.34",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-oversized",
+      "name": "Oversized Shorts",
+      "description": "Oversized shorts \u2014 shorts.",
+      "price": "2.23",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-vintage",
+      "name": "Vintage Shorts",
+      "description": "Vintage shorts \u2014 shorts.",
+      "price": "3.12",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-relaxed",
+      "name": "Relaxed Shorts",
+      "description": "Relaxed shorts \u2014 shorts.",
+      "price": "4.01",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-premium",
+      "name": "Premium Shorts",
+      "description": "Premium shorts \u2014 shorts.",
+      "price": "4.90",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-organic",
+      "name": "Organic Shorts",
+      "description": "Organic shorts \u2014 shorts.",
+      "price": "5.79",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-striped",
+      "name": "Striped Shorts",
+      "description": "Striped shorts \u2014 shorts.",
+      "price": "6.68",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-heavyweight",
+      "name": "Heavyweight Shorts",
+      "description": "Heavyweight shorts \u2014 shorts.",
+      "price": "7.57",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-everyday",
+      "name": "Everyday Shorts",
+      "description": "Everyday shorts \u2014 shorts.",
+      "price": "8.46",
+      "category": "Shorts"
+    },
+    {
+      "id": "jackets-classic",
+      "name": "Classic Jacket",
+      "description": "Classic jacket \u2014 jackets.",
+      "price": "9.35",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-slim",
+      "name": "Slim-Fit Jacket",
+      "description": "Slim-Fit jacket \u2014 jackets.",
+      "price": "1.23",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-oversized",
+      "name": "Oversized Jacket",
+      "description": "Oversized jacket \u2014 jackets.",
+      "price": "2.12",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-vintage",
+      "name": "Vintage Jacket",
+      "description": "Vintage jacket \u2014 jackets.",
+      "price": "3.01",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-relaxed",
+      "name": "Relaxed Jacket",
+      "description": "Relaxed jacket \u2014 jackets.",
+      "price": "3.90",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-premium",
+      "name": "Premium Jacket",
+      "description": "Premium jacket \u2014 jackets.",
+      "price": "4.79",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-organic",
+      "name": "Organic Jacket",
+      "description": "Organic jacket \u2014 jackets.",
+      "price": "5.68",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-striped",
+      "name": "Striped Jacket",
+      "description": "Striped jacket \u2014 jackets.",
+      "price": "6.57",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-heavyweight",
+      "name": "Heavyweight Jacket",
+      "description": "Heavyweight jacket \u2014 jackets.",
+      "price": "7.46",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-everyday",
+      "name": "Everyday Jacket",
+      "description": "Everyday jacket \u2014 jackets.",
+      "price": "8.35",
+      "category": "Jackets"
+    },
+    {
+      "id": "hats-classic",
+      "name": "Classic Beanie",
+      "description": "Classic beanie \u2014 hats.",
+      "price": "9.24",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-slim",
+      "name": "Slim-Fit Beanie",
+      "description": "Slim-Fit beanie \u2014 hats.",
+      "price": "1.12",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-oversized",
+      "name": "Oversized Beanie",
+      "description": "Oversized beanie \u2014 hats.",
+      "price": "2.01",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-vintage",
+      "name": "Vintage Beanie",
+      "description": "Vintage beanie \u2014 hats.",
+      "price": "2.90",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-relaxed",
+      "name": "Relaxed Beanie",
+      "description": "Relaxed beanie \u2014 hats.",
+      "price": "3.79",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-premium",
+      "name": "Premium Beanie",
+      "description": "Premium beanie \u2014 hats.",
+      "price": "4.68",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-organic",
+      "name": "Organic Beanie",
+      "description": "Organic beanie \u2014 hats.",
+      "price": "5.57",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-striped",
+      "name": "Striped Beanie",
+      "description": "Striped beanie \u2014 hats.",
+      "price": "6.46",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-heavyweight",
+      "name": "Heavyweight Beanie",
+      "description": "Heavyweight beanie \u2014 hats.",
+      "price": "7.35",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-everyday",
+      "name": "Everyday Beanie",
+      "description": "Everyday beanie \u2014 hats.",
+      "price": "8.24",
+      "category": "Hats"
+    },
+    {
+      "id": "socks-classic",
+      "name": "Classic Socks",
+      "description": "Classic socks \u2014 socks.",
+      "price": "9.13",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-slim",
+      "name": "Slim-Fit Socks",
+      "description": "Slim-Fit socks \u2014 socks.",
+      "price": "1.01",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-oversized",
+      "name": "Oversized Socks",
+      "description": "Oversized socks \u2014 socks.",
+      "price": "1.90",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-vintage",
+      "name": "Vintage Socks",
+      "description": "Vintage socks \u2014 socks.",
+      "price": "2.79",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-relaxed",
+      "name": "Relaxed Socks",
+      "description": "Relaxed socks \u2014 socks.",
+      "price": "3.68",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-premium",
+      "name": "Premium Socks",
+      "description": "Premium socks \u2014 socks.",
+      "price": "4.57",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-organic",
+      "name": "Organic Socks",
+      "description": "Organic socks \u2014 socks.",
+      "price": "5.46",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-striped",
+      "name": "Striped Socks",
+      "description": "Striped socks \u2014 socks.",
+      "price": "6.35",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-heavyweight",
+      "name": "Heavyweight Socks",
+      "description": "Heavyweight socks \u2014 socks.",
+      "price": "7.24",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-everyday",
+      "name": "Everyday Socks",
+      "description": "Everyday socks \u2014 socks.",
+      "price": "8.13",
+      "category": "Socks"
+    },
+    {
+      "id": "accessories-classic",
+      "name": "Classic Belt",
+      "description": "Classic belt \u2014 accessories.",
+      "price": "9.02",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-slim",
+      "name": "Slim-Fit Belt",
+      "description": "Slim-Fit belt \u2014 accessories.",
+      "price": "9.91",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-oversized",
+      "name": "Oversized Belt",
+      "description": "Oversized belt \u2014 accessories.",
+      "price": "1.79",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-vintage",
+      "name": "Vintage Belt",
+      "description": "Vintage belt \u2014 accessories.",
+      "price": "2.68",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-relaxed",
+      "name": "Relaxed Belt",
+      "description": "Relaxed belt \u2014 accessories.",
+      "price": "3.57",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-premium",
+      "name": "Premium Belt",
+      "description": "Premium belt \u2014 accessories.",
+      "price": "4.46",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-organic",
+      "name": "Organic Belt",
+      "description": "Organic belt \u2014 accessories.",
+      "price": "5.35",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-striped",
+      "name": "Striped Belt",
+      "description": "Striped belt \u2014 accessories.",
+      "price": "6.24",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-heavyweight",
+      "name": "Heavyweight Belt",
+      "description": "Heavyweight belt \u2014 accessories.",
+      "price": "7.13",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-everyday",
+      "name": "Everyday Belt",
+      "description": "Everyday belt \u2014 accessories.",
+      "price": "8.02",
+      "category": "Accessories"
+    }
+  ]
+}
