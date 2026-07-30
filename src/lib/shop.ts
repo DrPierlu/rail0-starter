@@ -112,7 +112,8 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
 export async function captureOrder(orderId: string): Promise<Order> {
   const order = requireOrderInState(orderId, "in_escrow");
   const seller = await clientFor("seller");
-  const prep = await seller.payments.capturePrepare(order.rail0_id, order.total_base);
+  // capture/refund prepare, like create, take the HUMAN decimal amount.
+  const prep = await seller.payments.capturePrepare(order.rail0_id, order.total);
   if (!prep.unsigned_transaction) {
     throw new ShopError(502, "gateway returned no unsigned capture transaction");
   }
@@ -143,23 +144,26 @@ export async function voidOrder(orderId: string): Promise<Order> {
 }
 
 /**
- * Lazily sync an order with the gateway: while an on-chain operation is in
- * flight (authorizing/capturing/voiding) each read re-fetches the payment and
- * advances the order when the operation confirms — or parks it in `failed`
- * with the decoded on-chain error when it doesn't. No background jobs.
+ * Lazily sync an order with the gateway on every read — no background jobs.
+ * The mapping is per-state, not global: while a capture is in flight the
+ * payment still reads `authorized`, and a global status→state map would
+ * regress the order to in_escrow (and then stop refreshing it). Only the
+ * statuses that genuinely END the order's current phase advance it; anything
+ * else just updates the mirrored payment_status. `in_escrow` is refreshable
+ * too, so a capture/void done outside this app (e.g. from rail0-admin) is
+ * picked up. A failed tx of the in-flight operation parks the order in
+ * `failed` with the decoded on-chain error.
  */
 export async function refreshOrder(orderId: string): Promise<Order> {
   const order = getOrder(orderId);
   if (!order) throw new ShopError(404, "order not found");
-  if (!order.rail0_id || !TRANSITIONAL.has(order.state)) return order;
+  const completions = REFRESHABLE[order.state];
+  if (!order.rail0_id || !completions) return order;
 
   const seller = await clientFor("seller");
   const payment = await seller.payments.get(order.rail0_id);
 
-  // A terminal payment status always wins; only when the payment is still in
-  // the pre-transition status do we look for a failed tx of the in-flight
-  // operation to park the order in `failed`.
-  const nextState = STATUS_TO_STATE[payment.status];
+  const nextState = completions[payment.status];
   if (nextState) {
     return applyOrder(order.id, {
       state: nextState,
@@ -179,16 +183,22 @@ export async function refreshOrder(orderId: string): Promise<Order> {
   return applyOrder(order.id, { payment_status: payment.status });
 }
 
-const TRANSITIONAL = new Set<OrderState>(["authorizing", "capturing", "voiding"]);
-
-// Payment statuses that end a transition. In-flight statuses (signed while the
-// authorize is still pending) keep the current transitional state.
-const STATUS_TO_STATE: Partial<Record<string, OrderState>> = {
-  authorized: "in_escrow",
+// Per-state completion map: which payment statuses move the order forward
+// from each refreshable state. `partially_captured` maps to settled from
+// capturing because this app only ever captures the full amount — a partial
+// capture can only come from outside and still ends the fulfilment phase.
+const SETTLED_OR_UNDONE: Partial<Record<string, OrderState>> = {
   captured: "settled",
-  partially_captured: "in_escrow",
+  partially_captured: "settled",
   voided: "cancelled",
   released: "cancelled",
+};
+
+const REFRESHABLE: Partial<Record<OrderState, Partial<Record<string, OrderState>>>> = {
+  authorizing: { authorized: "in_escrow", ...SETTLED_OR_UNDONE },
+  in_escrow: SETTLED_OR_UNDONE,
+  capturing: SETTLED_OR_UNDONE,
+  voiding: SETTLED_OR_UNDONE,
 };
 
 const IN_FLIGHT_OPERATION: Partial<Record<OrderState, string>> = {

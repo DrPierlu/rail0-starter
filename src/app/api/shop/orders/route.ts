@@ -81,7 +81,10 @@ export async function POST(request: NextRequest) {
           payee: addressFor("seller"),
           chain_id: method.chain_id,
           token: method.address,
-          amount: order.total_base,
+          // The gateway's POST /payments takes the HUMAN decimal amount and
+          // converts to base units itself; amount_base is informative only.
+          amount: order.total,
+          amount_base: order.total_base,
           mode: "authorize",
         },
       },

@@ -11,7 +11,10 @@ interface PaymentInstructions {
   payee: string;
   chain_id: number;
   token: string;
+  /** Human decimal amount (e.g. "5.20") — what the gateway's create expects. */
   amount: string;
+  /** Same amount in token base units, informative only. */
+  amount_base: string;
   mode: string;
 }
 
