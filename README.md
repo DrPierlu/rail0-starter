@@ -114,9 +114,11 @@ pnpm test        # Vitest unit tests
   custodies keys), and the seller key in a proper secret store or signer.
 - **Catalog** is a static `catalog.json`; the merchant identity is just the
   seller wallet — no accounts to create.
-- The SDK is vendored as a tarball in `vendor/` until `@rail0/sdk` is
-  published to npm; regenerate it with `pnpm pack` in a sibling `rail0-ts`
-  checkout.
+- The SDK is vendored as a tarball in `vendor/` until `@rail0/sdk` is published
+  to npm. To pick up rail0-ts changes run `bin/sync-sdk` (builds and packs the
+  sibling `../rail0-ts` — override with `RAIL0_TS_DIR` — straight into
+  `vendor/`, then re-adds the dependency so the lockfile's integrity hash is
+  recomputed), and commit the refreshed tarball.
 
 ## Related
 
