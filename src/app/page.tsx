@@ -1,162 +1,79 @@
-"use client";
+import Link from "next/link";
 
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { useState } from "react";
-import { Streamdown } from "streamdown";
+// Static landing page: the app plays both sides of the trade, so the entry
+// point is a choice of role rather than one of the two views. No data fetching
+// here on purpose — the two sides read their own state once you pick one.
 
-const SUGGESTIONS = [
-  "What's in the store?",
-  "Find me a t-shirt under $3",
-  "How can I pay?",
-  "Show my orders",
+const ROLES = [
+  {
+    href: "/buyer",
+    title: "Buyer agent",
+    tagline: "Shop by chatting",
+    body: "An AI agent browses the merchant's catalog, builds your cart and — on your confirmation — creates the rail0 payment and signs it with the buyer's own key. The funds go into escrow, not to the merchant.",
+  },
+  {
+    href: "/merchant",
+    title: "Merchant",
+    tagline: "Fulfil and settle",
+    body: "The back-office: orders with their live payment state. Fulfil an order to capture the escrow, or cancel it to void the authorization and hand the funds back. Signed with the seller's own key.",
+  },
 ];
 
-export default function Chat() {
-  const [input, setInput] = useState("");
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
-  });
+const LIFECYCLE = [
+  ["authorize", "the buyer's stablecoins move into on-chain escrow at checkout"],
+  ["capture", "the merchant settles them after fulfilment"],
+  ["void", "or gives them back, and the buyer is made whole"],
+];
 
-  const busy = status === "submitted" || status === "streaming";
-
-  const submit = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || busy) return;
-    sendMessage({ text: trimmed });
-    setInput("");
-  };
-
+export default function Home() {
   return (
-    <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
-      <div className="flex-1 space-y-4 overflow-y-auto py-6">
-        {messages.length === 0 && (
-          <div className="pt-16 text-center">
-            <h1 className="text-lg font-semibold">Shop with an AI agent, pay over rail0 escrow</h1>
-            <p className="mx-auto mt-2 max-w-md text-sm text-neutral-500">
-              The agent browses the merchant&apos;s catalog, builds your cart, and pays in
-              stablecoins. Funds sit in on-chain escrow until the merchant fulfils and captures the
-              order.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => submit(s)}
-                  className="rounded-full border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                >
-                  {s}
-                </button>
-              ))}
+    <main className="mx-auto max-w-4xl px-4 py-16">
+      <h1 className="text-2xl font-semibold tracking-tight">
+        Agentic commerce over stablecoin escrow
+      </h1>
+      <p className="mt-3 max-w-2xl text-sm text-neutral-500">
+        This one app plays both sides of the trade, talking to itself over HTTP the way two real
+        deployments would. Pick a side.
+      </p>
+
+      <div className="mt-10 grid gap-4 sm:grid-cols-2">
+        {ROLES.map((role) => (
+          <Link
+            key={role.href}
+            href={role.href}
+            className="group rounded-xl border border-neutral-200 p-5 transition-colors hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
+          >
+            <div className="flex items-baseline gap-2">
+              <h2 className="font-semibold">{role.title}</h2>
+              <span className="text-xs text-neutral-400">{role.tagline}</span>
+              <span className="ml-auto text-neutral-400 transition-transform group-hover:translate-x-0.5">
+                →
+              </span>
             </div>
-          </div>
-        )}
-        {messages.map((message) => (
-          <div key={message.id} className={message.role === "user" ? "flex justify-end" : ""}>
-            <div
-              className={
-                message.role === "user"
-                  ? "max-w-[80%] rounded-2xl bg-neutral-900 px-4 py-2 text-sm text-white dark:bg-neutral-100 dark:text-black"
-                  : "space-y-2 text-sm"
-              }
-            >
-              {message.parts.map((part, i) => {
-                // Message parts carry no stable id, and the list is append-only
-                // within a message — the index is the only usable key.
-                if (part.type === "text") {
-                  return message.role === "user" ? (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
-                    <span key={i}>{part.text}</span>
-                  ) : (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
-                    <Streamdown key={i}>{part.text}</Streamdown>
-                  );
-                }
-                if (part.type.startsWith("tool-")) {
-                  // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
-                  return <ToolChip key={i} part={part as ToolPart} />;
-                }
-                return null;
-              })}
-            </div>
-          </div>
+            <p className="mt-2 text-sm text-neutral-500">{role.body}</p>
+          </Link>
         ))}
-        {busy && <div className="text-sm text-neutral-400">the agent is working…</div>}
       </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(input);
-        }}
-        className="sticky bottom-0 flex gap-2 border-t border-neutral-200 bg-[var(--background)] py-3 dark:border-neutral-800"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask the agent to shop for you…"
-          className="flex-1 rounded-xl border border-neutral-300 bg-transparent px-4 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
-        >
-          Send
-        </button>
-      </form>
+
+      <div className="mt-12 border-t border-neutral-200 pt-6 dark:border-neutral-800">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+          The lifecycle
+        </h3>
+        <dl className="mt-3 space-y-1.5 text-sm">
+          {LIFECYCLE.map(([step, what]) => (
+            <div key={step} className="flex gap-3">
+              <dt className="w-24 shrink-0 font-mono text-xs leading-5 text-emerald-600 dark:text-emerald-400">
+                {step}
+              </dt>
+              <dd className="text-neutral-500">{what}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-4 text-xs text-neutral-400">
+          Neither key ever leaves its own side: the buyer signs its payments, the seller signs its
+          transactions, and the gateway custodies nothing.
+        </p>
+      </div>
     </main>
-  );
-}
-
-interface ToolPart {
-  type: string;
-  state: "input-streaming" | "input-available" | "output-available" | "output-error";
-  input?: unknown;
-  output?: unknown;
-  errorText?: string;
-}
-
-function ToolChip({ part }: { part: ToolPart }) {
-  const [open, setOpen] = useState(false);
-  const name = part.type.replace(/^tool-/, "");
-  const done = part.state === "output-available";
-  const error = part.state === "output-error";
-  const isPayment = name === "checkout";
-
-  return (
-    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs"
-      >
-        <span
-          className={
-            error
-              ? "size-2 rounded-full bg-red-500"
-              : done
-                ? "size-2 rounded-full bg-emerald-500"
-                : "size-2 animate-pulse rounded-full bg-amber-500"
-          }
-        />
-        <span>{name}</span>
-        {isPayment && (
-          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-            rail0 escrow
-          </span>
-        )}
-        <span className="ml-auto text-neutral-400">{open ? "−" : "+"}</span>
-      </button>
-      {open && (
-        <pre className="max-h-64 overflow-auto border-t border-neutral-200 px-3 py-2 text-[11px] leading-relaxed dark:border-neutral-800">
-          {JSON.stringify(
-            { input: part.input, output: part.output, error: part.errorText },
-            null,
-            2,
-          )}
-        </pre>
-      )}
-    </div>
   );
 }

@@ -14,8 +14,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="antialiased">
         <header className="border-b border-neutral-200 dark:border-neutral-800">
           <nav className="mx-auto flex max-w-4xl items-center gap-6 px-4 py-3 text-sm">
-            <span className="font-semibold tracking-tight">rail0 starter</span>
-            <Link href="/" className="hover:underline">
+            <Link href="/" className="font-semibold tracking-tight">
+              rail0 starter
+            </Link>
+            <Link href="/buyer" className="hover:underline">
               Buyer agent
             </Link>
             <Link href="/merchant" className="hover:underline">

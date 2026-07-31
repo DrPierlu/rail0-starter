@@ -1,0 +1,162 @@
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import { Streamdown } from "streamdown";
+
+const SUGGESTIONS = [
+  "What's in the store?",
+  "Find me a t-shirt under $3",
+  "How can I pay?",
+  "Show my orders",
+];
+
+export default function Chat() {
+  const [input, setInput] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({ api: "/api/chat" }),
+  });
+
+  const busy = status === "submitted" || status === "streaming";
+
+  const submit = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    sendMessage({ text: trimmed });
+    setInput("");
+  };
+
+  return (
+    <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
+      <div className="flex-1 space-y-4 overflow-y-auto py-6">
+        {messages.length === 0 && (
+          <div className="pt-16 text-center">
+            <h1 className="text-lg font-semibold">Shop with an AI agent, pay over rail0 escrow</h1>
+            <p className="mx-auto mt-2 max-w-md text-sm text-neutral-500">
+              The agent browses the merchant&apos;s catalog, builds your cart, and pays in
+              stablecoins. Funds sit in on-chain escrow until the merchant fulfils and captures the
+              order.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => submit(s)}
+                  className="rounded-full border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {messages.map((message) => (
+          <div key={message.id} className={message.role === "user" ? "flex justify-end" : ""}>
+            <div
+              className={
+                message.role === "user"
+                  ? "max-w-[80%] rounded-2xl bg-neutral-900 px-4 py-2 text-sm text-white dark:bg-neutral-100 dark:text-black"
+                  : "space-y-2 text-sm"
+              }
+            >
+              {message.parts.map((part, i) => {
+                // Message parts carry no stable id, and the list is append-only
+                // within a message — the index is the only usable key.
+                if (part.type === "text") {
+                  return message.role === "user" ? (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
+                    <span key={i}>{part.text}</span>
+                  ) : (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
+                    <Streamdown key={i}>{part.text}</Streamdown>
+                  );
+                }
+                if (part.type.startsWith("tool-")) {
+                  // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
+                  return <ToolChip key={i} part={part as ToolPart} />;
+                }
+                return null;
+              })}
+            </div>
+          </div>
+        ))}
+        {busy && <div className="text-sm text-neutral-400">the agent is working…</div>}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit(input);
+        }}
+        className="sticky bottom-0 flex gap-2 border-t border-neutral-200 bg-[var(--background)] py-3 dark:border-neutral-800"
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask the agent to shop for you…"
+          className="flex-1 rounded-xl border border-neutral-300 bg-transparent px-4 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
+        />
+        <button
+          type="submit"
+          disabled={busy || !input.trim()}
+          className="rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
+        >
+          Send
+        </button>
+      </form>
+    </main>
+  );
+}
+
+interface ToolPart {
+  type: string;
+  state: "input-streaming" | "input-available" | "output-available" | "output-error";
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
+}
+
+function ToolChip({ part }: { part: ToolPart }) {
+  const [open, setOpen] = useState(false);
+  const name = part.type.replace(/^tool-/, "");
+  const done = part.state === "output-available";
+  const error = part.state === "output-error";
+  const isPayment = name === "checkout";
+
+  return (
+    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs"
+      >
+        <span
+          className={
+            error
+              ? "size-2 rounded-full bg-red-500"
+              : done
+                ? "size-2 rounded-full bg-emerald-500"
+                : "size-2 animate-pulse rounded-full bg-amber-500"
+          }
+        />
+        <span>{name}</span>
+        {isPayment && (
+          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+            rail0 escrow
+          </span>
+        )}
+        <span className="ml-auto text-neutral-400">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <pre className="max-h-64 overflow-auto border-t border-neutral-200 px-3 py-2 text-[11px] leading-relaxed dark:border-neutral-800">
+          {JSON.stringify(
+            { input: part.input, output: part.output, error: part.errorText },
+            null,
+            2,
+          )}
+        </pre>
+      )}
+    </div>
+  );
+}

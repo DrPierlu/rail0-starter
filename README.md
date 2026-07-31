@@ -13,11 +13,12 @@ or gives them back by voiding it. That lifecycle is exactly what buying
 
 ## What's inside
 
-One Next.js app playing both roles, talking to each other over HTTP:
+One Next.js app playing both roles, talking to each other over HTTP (`/` is
+just a landing page to pick a side):
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| **Buyer agent** | `/` + `src/app/api/chat` | An AI SDK chat agent with commerce tools: browses the catalog, builds a cart, and on your confirmation creates + signs the rail0 payment (EIP-3009, signed locally with the buyer key) |
+| **Buyer agent** | `/buyer` + `src/app/api/chat` | An AI SDK chat agent with commerce tools: browses the catalog, builds a cart, and on your confirmation creates + signs the rail0 payment (EIP-3009, signed locally with the buyer key) |
 | **Storefront API** | `src/app/api/shop/*` | The merchant server: products, accepted payment methods (read live from the gateway), orders. Verifies the buyer's payment on the gateway, then **authorizes it automatically** — funds move to escrow |
 | **Merchant view** | `/merchant` | Minimal back-office: order list with live payment state, **Fulfil & capture** and **Cancel & void** buttons |
 
@@ -78,8 +79,9 @@ API key.
    dependencies, and warns if no gateway is answering. Equivalent by hand:
    `pnpm install && pnpm dev`.)
 
-   Open [http://localhost:3000](http://localhost:3000), ask the agent to shop,
-   then capture the order on [http://localhost:3000/merchant](http://localhost:3000/merchant).
+   Open [http://localhost:3000](http://localhost:3000) and pick a side: ask the
+   agent to shop on [/buyer](http://localhost:3000/buyer), then capture the
+   order on [/merchant](http://localhost:3000/merchant).
 
 ## Development
 
