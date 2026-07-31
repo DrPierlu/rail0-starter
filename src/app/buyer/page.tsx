@@ -14,7 +14,7 @@ const SUGGESTIONS = [
 
 export default function Chat() {
   const [input, setInput] = useState("");
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, error, regenerate } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
 
@@ -83,6 +83,20 @@ export default function Chat() {
           </div>
         ))}
         {busy && <div className="text-sm text-neutral-400">the agent is working…</div>}
+        {/* Without this the turn just vanishes: the SDK keeps stream failures in
+            `error`, and a provider 529 is common enough to surface with a retry. */}
+        {error && !busy && (
+          <div className="flex items-center gap-3 rounded-lg border border-red-300 px-3 py-2 text-sm dark:border-red-900">
+            <span className="text-red-600 dark:text-red-400">{error.message}</span>
+            <button
+              type="button"
+              onClick={() => regenerate()}
+              className="ml-auto rounded-lg border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
       <form
         onSubmit={(e) => {

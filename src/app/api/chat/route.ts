@@ -33,6 +33,10 @@ export const POST = async (request: Request) => {
     system: SYSTEM,
     messages: convertToModelMessages(messages),
     stopWhen: stepCountIs(10),
+    // A checkout can be several tool round-trips deep when the model 529s, and
+    // losing the turn means the user retypes the confirmation. Worth a couple
+    // more attempts than the SDK's default 2.
+    maxRetries: 4,
     tools: {
       list_products: tool({
         description:
@@ -135,5 +139,20 @@ export const POST = async (request: Request) => {
     },
   });
 
-  return result.toUIMessageStreamResponse({ sendReasoning: true });
+  return result.toUIMessageStreamResponse({ sendReasoning: true, onError: chatErrorMessage });
 };
+
+/**
+ * The AI SDK swallows stream errors into a generic "An error occurred." unless
+ * onError maps them, which left the chat silently dead on the most common
+ * failure by far: a 529 from the model provider (upstream overload, retried and
+ * given up on — nothing wrong with this app). Name that case, and pass anything
+ * else through so tool/gateway failures are debuggable in the UI.
+ */
+function chatErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/overloaded|\b529\b/i.test(message)) {
+    return "The model is overloaded right now — retry in a moment.";
+  }
+  return message;
+}
