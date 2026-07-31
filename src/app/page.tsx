@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { VercelLogo } from "./vercel";
 
 // Static landing page: the app plays both sides of the trade, so the entry
 // point is a choice of role rather than one of the two views. No data fetching
@@ -73,6 +74,15 @@ export default function Home() {
           Neither key ever leaves its own side: the buyer signs its payments, the seller signs its
           transactions, and the gateway custodies nothing.
         </p>
+        <a
+          href="https://vercel.com/new"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
+        >
+          <VercelLogo className="h-2.5 w-2.5" />
+          Deploy on Vercel
+        </a>
       </div>
     </main>
   );

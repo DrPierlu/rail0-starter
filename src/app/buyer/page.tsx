@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { type ToolPart, ToolView } from "./tool-views";
 
@@ -21,6 +21,23 @@ export default function Chat() {
 
   const busy = status === "submitted" || status === "streaming";
 
+  // Follow the stream: keep the transcript pinned to the bottom while new
+  // tokens arrive, but only when the user is already there — scrolling up to
+  // re-read something must not get yanked back down. The effect has no dep
+  // array on purpose: streaming mutates message parts in place, so "every
+  // render" is exactly the granularity that tracks it (and the live order
+  // cards growing after the stream ends).
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const pinnedRef = useRef(true);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+  });
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
+
   const submit = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
@@ -30,7 +47,7 @@ export default function Chat() {
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
-      <div className="flex-1 space-y-4 overflow-y-auto py-6">
+      <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
         {messages.length === 0 && (
           <div className="pt-16 text-center">
             <h1 className="text-lg font-semibold">Shop with an AI agent, pay over rail0 escrow</h1>

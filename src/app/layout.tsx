@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { VercelLink } from "./vercel";
 
 export const metadata: Metadata = {
   title: "rail0 starter — agentic commerce over escrow",
@@ -23,7 +24,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/merchant" className="hover:underline">
               Merchant
             </Link>
-            <span className="ml-auto text-xs text-neutral-500">stablecoin escrow payments</span>
+            <span className="ml-auto flex items-center gap-4 text-xs text-neutral-500">
+              <span className="hidden sm:inline">stablecoin escrow payments</span>
+              <VercelLink />
+            </span>
           </nav>
         </header>
         {children}
