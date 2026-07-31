@@ -29,4 +29,11 @@ if ! curl -sf -m 3 "$gateway_url/health" > /dev/null 2>&1; then
   echo "         (local stack: run bin/dev in rail0-gateway first)"
 fi
 
+# Export the env for the eve agent service too: withEve() runs it as a
+# sibling dev server, and only Next itself reads .env.local.
+set -a
+# shellcheck disable=SC1091
+source .env.local
+set +a
+
 exec pnpm dev
