@@ -13,11 +13,48 @@ const SUGGESTIONS = [
   "Show my orders",
 ];
 
+// Where the transcript is parked while this page is unmounted. sessionStorage, not
+// localStorage: the conversation has to survive a hop to /merchant and back, but a
+// demo shown to the next person should start clean.
+const TRANSCRIPT_KEY = "rail0-starter:chat";
+
 export default function Chat() {
   const [input, setInput] = useState("");
-  const { messages, sendMessage, status, error, regenerate } = useChat({
+  const { messages, setMessages, sendMessage, status, error, regenerate } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
+
+  // Capturing an order means leaving for /merchant, which unmounts this page — and
+  // useChat keeps its messages in component state only, so the whole conversation
+  // (mid-purchase) used to be gone on the way back. Restore once on mount, then
+  // mirror every change. Restoring in an effect rather than seeding useChat keeps
+  // the server render and the first client render identical (no hydration
+  // mismatch); the cost is one frame of empty transcript.
+  const restored = useRef(false);
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(TRANSCRIPT_KEY);
+      if (saved) setMessages(JSON.parse(saved));
+    } catch {
+      // corrupt or unavailable storage — start fresh rather than break the page
+    }
+    restored.current = true;
+  }, [setMessages]);
+
+  useEffect(() => {
+    // Guard on `restored`: the first render has no messages yet, and writing that
+    // empty array would wipe the transcript we are about to restore.
+    if (!restored.current) return;
+    try {
+      if (messages.length > 0) {
+        sessionStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(messages));
+      } else {
+        sessionStorage.removeItem(TRANSCRIPT_KEY);
+      }
+    } catch {
+      // over quota or unavailable — the in-memory conversation still works
+    }
+  }, [messages]);
 
   const busy = status === "submitted" || status === "streaming";
 
@@ -120,6 +157,17 @@ export default function Chat() {
           </div>
         )}
       </div>
+      {messages.length > 0 && (
+        <div className="flex justify-end pb-1">
+          <button
+            type="button"
+            onClick={() => setMessages([])}
+            className="text-xs text-neutral-400 hover:text-neutral-600 hover:underline dark:hover:text-neutral-300"
+          >
+            New conversation
+          </button>
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();

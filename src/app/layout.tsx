@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { Rail0Logo } from "./rail0-logo";
+import { RoleSwitch } from "./role-switch";
 
 export const metadata: Metadata = {
   title: "rail0 starter — agentic commerce over escrow",
@@ -19,13 +20,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Rail0Logo className="h-3.5" />
               <span className="font-semibold tracking-tight">starter</span>
             </Link>
-            <Link href="/buyer" className="hover:underline">
-              Buyer agent
-            </Link>
-            <Link href="/merchant" className="hover:underline">
-              Merchant
-            </Link>
-            <span className="ml-auto text-xs text-neutral-500">stablecoin escrow payments</span>
+            <RoleSwitch />
+            <span className="ml-auto hidden text-xs text-neutral-500 sm:inline">
+              stablecoin escrow payments
+            </span>
           </nav>
         </header>
         {children}
