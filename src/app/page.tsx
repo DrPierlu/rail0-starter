@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { VercelLogo } from "./vercel";
+import { Rail0Logo } from "./rail0-logo";
 
 // Static landing page: the app plays both sides of the trade, so the entry
 // point is a choice of role rather than one of the two views. No data fetching
@@ -29,7 +29,8 @@ const LIFECYCLE = [
 export default function Home() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <Rail0Logo className="h-7" />
+      <h1 className="mt-6 text-2xl font-semibold tracking-tight">
         Agentic commerce over stablecoin escrow
       </h1>
       <p className="mt-3 max-w-2xl text-sm text-neutral-500">
@@ -74,15 +75,6 @@ export default function Home() {
           Neither key ever leaves its own side: the buyer signs its payments, the seller signs its
           transactions, and the gateway custodies nothing.
         </p>
-        <a
-          href="https://vercel.com/new"
-          target="_blank"
-          rel="noreferrer"
-          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
-        >
-          <VercelLogo className="h-2.5 w-2.5" />
-          Deploy on Vercel
-        </a>
       </div>
     </main>
   );
