@@ -1,22 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { Order } from "@/lib/store";
-
-const STATE_STYLES: Record<string, string> = {
-  awaiting_payment: "bg-neutral-500/10 text-neutral-500",
-  authorizing: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  in_escrow: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  capturing: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  settled: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  voiding: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  cancelled: "bg-neutral-500/10 text-neutral-500",
-  failed: "bg-red-500/10 text-red-600 dark:text-red-400",
-};
+import { CopyableId, StateBadge } from "../ui";
 
 export default function Merchant() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [acting, setActing] = useState<string | null>(null);
+  // Void is the destructive one (it hands the escrow back), so the button
+  // asks for a second click instead of firing immediately.
+  const [confirmingVoid, setConfirmingVoid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -42,6 +36,7 @@ export default function Merchant() {
 
   const act = async (orderId: string, action: "capture" | "void") => {
     setActing(orderId);
+    setConfirmingVoid(null);
     try {
       const res = await fetch(`/api/shop/orders/${orderId}/${action}`, {
         method: "POST",
@@ -69,7 +64,14 @@ export default function Merchant() {
       )}
       {orders.length === 0 ? (
         <p className="mt-10 text-center text-sm text-neutral-500">
-          No orders yet — ask the buyer agent to shop.
+          No orders yet —{" "}
+          <Link
+            href="/buyer"
+            className="underline hover:text-neutral-700 dark:hover:text-neutral-300"
+          >
+            ask the buyer agent to shop
+          </Link>
+          .
         </p>
       ) : (
         <div className="mt-6 space-y-3">
@@ -80,13 +82,7 @@ export default function Merchant() {
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-sm font-semibold">#{order.id}</span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    STATE_STYLES[order.state] ?? ""
-                  }`}
-                >
-                  {order.state.replace(/_/g, " ")}
-                </span>
+                <StateBadge state={order.state} />
                 <span className="ml-auto text-sm font-semibold">
                   {order.total} {order.token.symbol}
                 </span>
@@ -96,11 +92,7 @@ export default function Merchant() {
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
                 {order.token.chain_name && <span>{order.token.chain_name}</span>}
-                {order.rail0_id && (
-                  <span className="font-mono">
-                    {order.rail0_id.slice(0, 10)}…{order.rail0_id.slice(-6)}
-                  </span>
-                )}
+                {order.rail0_id && <CopyableId value={order.rail0_id} />}
                 {order.payment_status && <span>payment: {order.payment_status}</span>}
                 {order.error && <span className="text-red-500">{order.error}</span>}
               </div>
@@ -114,14 +106,34 @@ export default function Merchant() {
                   >
                     Fulfil & capture
                   </button>
-                  <button
-                    type="button"
-                    disabled={acting === order.id}
-                    onClick={() => act(order.id, "void")}
-                    className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                  >
-                    Cancel & void
-                  </button>
+                  {confirmingVoid === order.id ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={acting === order.id}
+                        onClick={() => act(order.id, "void")}
+                        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                      >
+                        Confirm void — return the escrow
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingVoid(null)}
+                        className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                      >
+                        Keep the order
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={acting === order.id}
+                      onClick={() => setConfirmingVoid(order.id)}
+                      className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                    >
+                      Cancel & void
+                    </button>
+                  )}
                 </div>
               )}
             </div>

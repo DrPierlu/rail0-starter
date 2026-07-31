@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState } from "react";
 import { Streamdown } from "streamdown";
+import { type ToolPart, ToolView } from "./tool-views";
 
 const SUGGESTIONS = [
   "What's in the store?",
@@ -73,9 +74,13 @@ export default function Chat() {
                     <Streamdown key={i}>{part.text}</Streamdown>
                   );
                 }
+                if (part.type === "reasoning") {
+                  // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
+                  return <Reasoning key={i} text={part.text} />;
+                }
                 if (part.type.startsWith("tool-")) {
                   // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
-                  return <ToolChip key={i} part={part as ToolPart} />;
+                  return <ToolView key={i} part={part as ToolPart} />;
                 }
                 return null;
               })}
@@ -123,53 +128,23 @@ export default function Chat() {
   );
 }
 
-interface ToolPart {
-  type: string;
-  state: "input-streaming" | "input-available" | "output-available" | "output-error";
-  input?: unknown;
-  output?: unknown;
-  errorText?: string;
-}
-
-function ToolChip({ part }: { part: ToolPart }) {
+/**
+ * The route streams reasoning (`sendReasoning: true`), but this page used to
+ * drop those parts on the floor — render them collapsed so the agent's
+ * thinking is inspectable without drowning the conversation.
+ */
+function Reasoning({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const name = part.type.replace(/^tool-/, "");
-  const done = part.state === "output-available";
-  const error = part.state === "output-error";
-  const isPayment = name === "checkout";
-
+  if (!text.trim()) return null;
   return (
-    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs"
-      >
-        <span
-          className={
-            error
-              ? "size-2 rounded-full bg-red-500"
-              : done
-                ? "size-2 rounded-full bg-emerald-500"
-                : "size-2 animate-pulse rounded-full bg-amber-500"
-          }
-        />
-        <span>{name}</span>
-        {isPayment && (
-          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-            rail0 escrow
-          </span>
-        )}
-        <span className="ml-auto text-neutral-400">{open ? "−" : "+"}</span>
+    <div className="text-xs text-neutral-400">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="italic hover:underline">
+        {open ? "hide thinking" : "thinking…"}
       </button>
       {open && (
-        <pre className="max-h-64 overflow-auto border-t border-neutral-200 px-3 py-2 text-[11px] leading-relaxed dark:border-neutral-800">
-          {JSON.stringify(
-            { input: part.input, output: part.output, error: part.errorText },
-            null,
-            2,
-          )}
-        </pre>
+        <p className="mt-1 whitespace-pre-wrap border-l-2 border-neutral-200 pl-2 dark:border-neutral-800">
+          {text}
+        </p>
       )}
     </div>
   );
