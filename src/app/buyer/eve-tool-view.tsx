@@ -1,23 +1,42 @@
 "use client";
 
 import type { EveDynamicToolPart } from "eve/react";
+import { SigningCard, type SignLoginOutput, type SignPaymentOutput } from "./signing-card";
 import { type ToolPart, ToolView } from "./tool-views";
 
 // Bridge between eve's `dynamic-tool` parts and the rich tool views built for
 // the AI SDK variant. The lifecycle states line up one-to-one, so everything
 // except the approval flow is a rename — which keeps tool-views.tsx identical
-// across the two branches.
+// across the two branches. The two checkout signing steps get their own card:
+// the browser wallet signs, and the signature goes to the storefront stash,
+// never through the chat.
 
 export function EveToolView({
   part,
   onRespond,
+  onContinue,
   busy,
 }: {
   part: EveDynamicToolPart;
-  /** Answer a pending HITL request (approve/deny the checkout). */
+  /** Answer a pending HITL request (approve/deny). */
   onRespond: (requestId: string, optionId: string) => void;
+  /** Send a chat message (the signing cards nudge the agent onward with it). */
+  onContinue: (text: string) => void;
   busy: boolean;
 }) {
+  if (part.state === "output-available") {
+    const output = part.output as { step?: string } | undefined;
+    if (output?.step === "sign_login" || output?.step === "sign_payment") {
+      return (
+        <SigningCard
+          output={output as SignLoginOutput | SignPaymentOutput}
+          onContinue={onContinue}
+          busy={busy}
+        />
+      );
+    }
+  }
+
   if (part.state === "approval-requested") {
     const request = part.toolMetadata?.eve?.inputRequest;
     return (

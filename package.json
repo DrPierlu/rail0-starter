@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.25",
+    "@noble/hashes": "^2.2.0",
     "@rail0/sdk": "file:vendor/rail0-sdk-1.0.0.tgz",
     "ai": "^7.0.42",
     "eve": "^0.29.2",

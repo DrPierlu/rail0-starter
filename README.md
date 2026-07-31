@@ -14,9 +14,14 @@ from a **merchant server**, paying in stablecoins through the
 > - The chat page talks to it with `useEveAgent` (`eve/react`); the session is
 >   durable server-side and survives cold starts and deploys. `sessionStorage`
 >   only parks the resumable cursor + rendered event log across a role switch.
-> - **Checkout is approval-gated** (`approval: always()`): eve replays
->   interrupted steps, and checkout must not run twice — the click in chat is
->   the idempotency barrier. Approve it when the card appears.
+> - **The buyer's key never touches the server.** There is no
+>   `BUYER_PRIVATE_KEY`: you connect the buyer wallet in the browser (MetaMask,
+>   or a pasted key that stays in the tab), and the checkout runs in three tool
+>   steps with two signing cards in chat — SIWE sign-in, then the EIP-3009
+>   payment authorization. Signatures reach the storefront out-of-band
+>   (`POST /api/shop/orders/:id/signature`), never through the model's context.
+>   The seller key stays server-side: that is the merchant's own backend
+>   signing its own transactions.
 > - The model is still called directly via `@ai-sdk/anthropic`
 >   (`ANTHROPIC_API_KEY`), no AI Gateway needed in dev.
 > - Tools run in the eve service, outside any Next request — so the storefront

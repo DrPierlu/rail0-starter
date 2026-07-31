@@ -11,6 +11,9 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^4.0.25
         version: 4.0.25(zod@4.4.3)
+      '@noble/hashes':
+        specifier: ^2.2.0
+        version: 2.2.0
       '@rail0/sdk':
         specifier: file:vendor/rail0-sdk-1.0.0.tgz
         version: file:vendor/rail0-sdk-1.0.0.tgz(ethers@6.17.0)

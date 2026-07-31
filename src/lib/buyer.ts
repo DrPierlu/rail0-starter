@@ -1,16 +1,14 @@
-import { signPayment } from "@rail0/sdk";
+import { Rail0Client, type SigningPayload } from "@rail0/sdk";
 import { env } from "./env";
-import { addressFor, clientFor, packSignature } from "./rail0";
-import type { Order } from "./store";
+import { clearSigning, getOrder, getSigning, type Order, putSigning } from "./store";
 
-// Buyer-side payment flow. The agent talks to the storefront over HTTP (the
-// buyer/seller boundary stays a real network boundary), but signs payments
-// locally with the buyer's own key — the seller never sees it.
-//
-// The storefront base URL comes from the chat request's own origin, not from
-// an env var: the storefront lives in this same app, and a hand-configured
-// URL (the old APP_URL) going stale — e.g. pointing at the port of a previous
-// run — silently killed every buyer tool with a bare "fetch failed".
+// Buyer-side payment flow — KEYLESS on this branch: the server never holds the
+// buyer's private key. Every buyer signature (the SIWE login and the EIP-3009
+// payment authorization) is produced in the browser — MetaMask or a pasted key
+// that stays client-side — and handed to the storefront out-of-band (the
+// signature stash in the store), never through the model's context where a
+// mangled hex digit would burn the payment. The checkout is therefore three
+// tool steps, each pausing for the browser to sign.
 
 interface PaymentInstructions {
   payee: string;
@@ -63,55 +61,131 @@ export function getShop(base: string) {
   };
 }
 
+// A bare (unauthenticated) gateway client: enough for the SIWE nonce, and the
+// carrier for auth.verify. One per call — no shared session state to corrupt.
+function bareClient(): Rail0Client {
+  return new Rail0Client({ baseUrl: env().GATEWAY_URL });
+}
+
 /**
- * Place and pay for an order in one buyer-side flow:
- *  1. create the order on the storefront (gets total + payment instructions)
- *  2. create the rail0 payment as the payer (mode: authorize — escrow)
- *  3. sign the EIP-3009 payload locally and store the signature
- *  4. hand the signed payment back to the storefront, which moves it to escrow
- *
- * Returns the order in `authorizing` state; the escrow confirms asynchronously
- * (poll order_status).
+ * The exact EIP-4361 text the browser must sign. Built server-side so the
+ * nonce comes straight from the gateway, in the one layout the gateway's SIWE
+ * parser accepts: checksummed address, and — with no statement — a DOUBLE
+ * blank line between the address and the URI field (verified against the
+ * ruby siwe gem; a single blank line is rejected as invalid input).
  */
-export async function placeAndPayOrder(
+function siweMessage(domain: string, uri: string, address: string, nonce: string): string {
+  return (
+    `${domain} wants you to sign in with your Ethereum account:\n${address}\n` +
+    `\n\nURI: ${uri}\nVersion: 1\nChain ID: ${env().SIWE_CHAIN_ID}\n` +
+    `Nonce: ${nonce}\nIssued At: ${new Date().toISOString()}`
+  );
+}
+
+/**
+ * Checkout step 1 — create the order and the SIWE challenge.
+ *
+ * `buyerAddress` comes from the connected browser wallet (checksummed there;
+ * the gateway's SIWE parser rejects a lowercase address). Returns the exact
+ * message the browser must personal_sign; everything the later steps need is
+ * parked in the signing stash, keyed by the order.
+ */
+export async function beginCheckout(
   base: string,
   items: { product_id: string; qty: number }[],
   chainId: number,
   tokenAddress: string,
-): Promise<{ order: Order; rail0_id: string }> {
+  buyerAddress: string,
+): Promise<{ order: Order; siwe_message: string; instructions: PaymentInstructions }> {
   const { order, payment_instructions } = await shopFetch<{
     order: Order;
     payment_instructions: PaymentInstructions;
   }>(base, "/api/shop/orders", {
     method: "POST",
-    body: JSON.stringify({
-      items,
-      chain_id: chainId,
-      token_address: tokenAddress,
-    }),
+    body: JSON.stringify({ items, chain_id: chainId, token_address: tokenAddress }),
   });
 
-  const buyer = await clientFor("buyer");
-  const payment = await buyer.payments.create({
-    chain_id: payment_instructions.chain_id,
+  const gateway = env().GATEWAY_URL;
+  const { nonce } = await bareClient().auth.getNonce();
+  const message = siweMessage(new URL(gateway).host, gateway, buyerAddress, nonce);
+
+  await putSigning(order.id, { address: buyerAddress, siwe_message: message });
+  return { order, siwe_message: message, instructions: payment_instructions };
+}
+
+/**
+ * Checkout step 2 — trade the browser's SIWE signature for a buyer session and
+ * create the rail0 payment as that payer. Returns the EIP-712 payload the
+ * browser must sign next (eth_signTypedData_v4 / the SDK's signPayment).
+ */
+export async function createPaymentForOrder(
+  base: string,
+  orderId: string,
+): Promise<{ rail0_id: string; signing_payload: SigningPayload }> {
+  const entry = await getSigning(orderId);
+  if (!entry) throw new Error(`no checkout in progress for order ${orderId}`);
+  if (!entry.siwe_signature) {
+    throw new Error("the sign-in signature has not arrived yet — ask the user to sign first");
+  }
+
+  const order = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}`).then(
+    (r) => r.order,
+  );
+
+  const client = bareClient();
+  const auth = await client.auth.verify(entry.siwe_message, entry.siwe_signature);
+  client.setAuthToken(auth.token);
+
+  const payment = await client.payments.create({
+    chain_id: order.token.chain_id,
     mode: "authorize",
-    amount: payment_instructions.amount,
-    token: payment_instructions.token,
-    payer: addressFor("buyer"),
-    payee: payment_instructions.payee,
-    description: `rail0-starter order ${order.id}`,
-    metadata: { order_id: order.id },
+    amount: order.total,
+    token: order.token.address,
+    payer: entry.address,
+    payee: (await shopFetch<{ merchant: { address: string } }>(base, "/api/shop/products")).merchant
+      .address,
+    description: `rail0-starter order ${orderId}`,
+    metadata: { order_id: orderId },
   });
 
-  const signature = signPayment(env().BUYER_PRIVATE_KEY as `0x${string}`, payment);
-  await buyer.payments.sign(payment.rail0_id, {
-    signature: packSignature(signature),
-  });
+  if (!payment.signing_payload) {
+    throw new Error("gateway returned no signing payload for the new payment");
+  }
+  await putSigning(orderId, { auth_token: auth.token, rail0_id: payment.rail0_id });
+  return { rail0_id: payment.rail0_id, signing_payload: payment.signing_payload };
+}
 
-  const attached = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${order.id}/payment`, {
+/**
+ * Checkout step 3 — attach the browser's EIP-3009 signature and hand the
+ * signed payment to the storefront, which verifies it and broadcasts the
+ * authorize. Tolerates a replay: if the order already moved past
+ * awaiting_payment, it just reports the current state.
+ */
+export async function submitSignedPayment(
+  base: string,
+  orderId: string,
+): Promise<{ order: Order; rail0_id: string }> {
+  const entry = await getSigning(orderId);
+  if (!entry?.rail0_id) throw new Error(`no payment created yet for order ${orderId}`);
+  if (!entry.eip3009_signature) {
+    throw new Error("the payment signature has not arrived yet — ask the user to sign first");
+  }
+
+  const current = await getOrder(orderId);
+  if (current && current.state !== "awaiting_payment") {
+    return { order: current, rail0_id: entry.rail0_id };
+  }
+
+  const client = bareClient();
+  if (!entry.auth_token) throw new Error("buyer session expired — restart the checkout");
+  client.setAuthToken(entry.auth_token);
+  await client.payments.sign(entry.rail0_id, { signature: entry.eip3009_signature });
+
+  const attached = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}/payment`, {
     method: "POST",
-    body: JSON.stringify({ rail0_id: payment.rail0_id }),
+    body: JSON.stringify({ rail0_id: entry.rail0_id }),
   });
 
-  return { order: attached.order, rail0_id: payment.rail0_id };
+  await clearSigning(orderId);
+  return { order: attached.order, rail0_id: entry.rail0_id };
 }

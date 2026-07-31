@@ -51,9 +51,29 @@ export interface Order {
   updated_at: string;
 }
 
+/**
+ * Browser-produced artifacts of an in-flight keyless checkout, keyed by order.
+ * The buyer's key never reaches the server, so its SIGNATURES (public data —
+ * they end up on-chain / at the gateway anyway) are handed over out-of-band
+ * through the storefront and parked here between the checkout steps, instead
+ * of round-tripping through the model's context where a mangled hex digit
+ * would burn the payment.
+ */
+export interface SigningEntry {
+  /** Checksummed buyer address, fixed at checkout_begin. */
+  address: string;
+  siwe_message: string;
+  siwe_signature?: string;
+  /** Buyer-session JWT, cached between the create and submit steps. */
+  auth_token?: string;
+  rail0_id?: string;
+  eip3009_signature?: string;
+}
+
 interface StoreData {
   cart: CartLine[];
   orders: Order[];
+  signing?: Record<string, SigningEntry>;
 }
 
 const EMPTY: StoreData = { cart: [], orders: [] };
@@ -212,4 +232,44 @@ export async function updateOrder(
   Object.assign(order, patch, { updated_at: new Date().toISOString() });
   await store.write(data);
   return order;
+}
+
+// ── Checkout signing hand-off ────────────────────────────────────────
+
+export async function getSigning(orderId: string): Promise<SigningEntry | undefined> {
+  return (await driver().read()).signing?.[orderId];
+}
+
+/** Create or merge the signing entry for an order. */
+export async function putSigning(
+  orderId: string,
+  patch: Partial<SigningEntry> & Pick<SigningEntry, "address" | "siwe_message">,
+): Promise<SigningEntry>;
+export async function putSigning(
+  orderId: string,
+  patch: Partial<SigningEntry>,
+): Promise<SigningEntry | undefined>;
+export async function putSigning(
+  orderId: string,
+  patch: Partial<SigningEntry>,
+): Promise<SigningEntry | undefined> {
+  const store = driver();
+  const data = await store.read();
+  data.signing ??= {};
+  const existing = data.signing[orderId];
+  if (!existing && (!patch.address || !patch.siwe_message)) return undefined;
+  const entry = { ...(existing ?? {}), ...patch } as SigningEntry;
+  data.signing[orderId] = entry;
+  await store.write(data);
+  return entry;
+}
+
+/** Drop an order's signing entry once the checkout settles (or is abandoned). */
+export async function clearSigning(orderId: string): Promise<void> {
+  const store = driver();
+  const data = await store.read();
+  if (data.signing?.[orderId]) {
+    delete data.signing[orderId];
+    await store.write(data);
+  }
 }

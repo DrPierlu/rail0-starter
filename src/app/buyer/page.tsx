@@ -5,6 +5,7 @@ import { useEveAgent } from "eve/react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { EveToolView } from "./eve-tool-view";
+import { useWallet, WalletChip, WalletProvider } from "./wallet";
 
 const SUGGESTIONS = [
   "What's in the store?",
@@ -43,12 +44,17 @@ export default function BuyerPage() {
   if (!mounted) {
     return <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4" />;
   }
-  return <EveChat />;
+  return (
+    <WalletProvider>
+      <EveChat />
+    </WalletProvider>
+  );
 }
 
 function EveChat() {
   const [input, setInput] = useState("");
   const [saved] = useState<SavedChat>(loadSaved);
+  const { wallet } = useWallet();
 
   const agent = useEveAgent({
     initialEvents: saved.events ?? [],
@@ -81,10 +87,19 @@ function EveChat() {
     if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
 
+  // Every turn carries the connected wallet address as ephemeral client
+  // context: checkout_begin needs it, and the model must never guess it.
+  const sendText = (text: string) => {
+    void agent.send({
+      message: text,
+      clientContext: wallet ? { buyer_wallet_address: wallet.address } : undefined,
+    });
+  };
+
   const submit = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
-    void agent.send({ message: trimmed });
+    sendText(trimmed);
     setInput("");
   };
 
@@ -96,7 +111,7 @@ function EveChat() {
   const retry = () => {
     const lastUser = [...agent.data.messages].reverse().find((m) => m.role === "user");
     const text = lastUser?.parts.find((p) => p.type === "text")?.text;
-    if (text) void agent.send({ message: text });
+    if (text) sendText(text);
   };
 
   const newConversation = () => {
@@ -110,6 +125,9 @@ function EveChat() {
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
+      <div className="flex justify-end border-b border-neutral-200 py-2 dark:border-neutral-800">
+        <WalletChip />
+      </div>
       <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
         {agent.data.messages.length === 0 && (
           <div className="pt-16 text-center">
@@ -159,8 +177,16 @@ function EveChat() {
                   return <Reasoning key={i} text={part.text} />;
                 }
                 if (part.type === "dynamic-tool") {
-                  // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
-                  return <EveToolView key={i} part={part} onRespond={respond} busy={busy} />;
+                  return (
+                    <EveToolView
+                      // biome-ignore lint/suspicious/noArrayIndexKey: parts have no id
+                      key={i}
+                      part={part}
+                      onRespond={respond}
+                      onContinue={sendText}
+                      busy={busy}
+                    />
+                  );
                 }
                 return null;
               })}
