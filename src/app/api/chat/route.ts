@@ -26,7 +26,10 @@ Rules:
 export const POST = async (request: Request) => {
   const { messages }: { messages: UIMessage[] } = await request.json();
 
-  const shop = getShop();
+  // The storefront is this same app, so its base URL is this request's own
+  // origin — no env var to configure (or to leave stale).
+  const shopBase = new URL(request.url).origin;
+  const shop = getShop(shopBase);
 
   const result = streamText({
     model: anthropic(env().AI_MODEL),
@@ -109,6 +112,7 @@ export const POST = async (request: Request) => {
           const cart = await getCart();
           if (cart.length === 0) return { error: "cart is empty" };
           const { order, rail0_id } = await placeAndPayOrder(
+            shopBase,
             cart.map((l) => ({ product_id: l.product_id, qty: l.qty })),
             chain_id,
             token_address,
@@ -154,5 +158,7 @@ function chatErrorMessage(error: unknown): string {
   if (/overloaded|\b529\b/i.test(message)) {
     return "The model is overloaded right now — retry in a moment.";
   }
-  return message;
+  // Some provider errors carry an empty message (e.g. a 404 with no body);
+  // an empty banner is worse than a generic one.
+  return message.trim() || "The agent hit an unexpected error — retry in a moment.";
 }

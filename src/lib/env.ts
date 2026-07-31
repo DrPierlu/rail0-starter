@@ -10,7 +10,6 @@ const schema = z.object({
   }),
   SIWE_CHAIN_ID: z.coerce.number().int().default(1),
   AI_MODEL: z.string().default("claude-sonnet-5"),
-  APP_URL: z.string().url().default("http://localhost:3000"),
 });
 
 type Env = z.infer<typeof schema>;
@@ -27,11 +26,6 @@ export function env(): Env {
       SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
-      APP_URL:
-        process.env.APP_URL ||
-        (process.env.VERCEL_PROJECT_PRODUCTION_URL
-          ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-          : undefined),
     });
   }
   return cached;

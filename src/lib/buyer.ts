@@ -6,6 +6,11 @@ import type { Order } from "./store";
 // Buyer-side payment flow. The agent talks to the storefront over HTTP (the
 // buyer/seller boundary stays a real network boundary), but signs payments
 // locally with the buyer's own key — the seller never sees it.
+//
+// The storefront base URL comes from the chat request's own origin, not from
+// an env var: the storefront lives in this same app, and a hand-configured
+// URL (the old APP_URL) going stale — e.g. pointing at the port of a previous
+// run — silently killed every buyer tool with a bare "fetch failed".
 
 interface PaymentInstructions {
   payee: string;
@@ -18,8 +23,8 @@ interface PaymentInstructions {
   mode: string;
 }
 
-async function shopFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${env().APP_URL}${path}`, {
+async function shopFetch<T>(base: string, path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${base}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
@@ -30,7 +35,7 @@ async function shopFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-export function getShop() {
+export function getShop(base: string) {
   return {
     products: (params?: { category?: string; search?: string }) => {
       const query = new URLSearchParams();
@@ -41,7 +46,7 @@ export function getShop() {
         merchant: { name: string; address: string };
         categories: string[];
         products: unknown[];
-      }>(`/api/shop/products${qs}`);
+      }>(base, `/api/shop/products${qs}`);
     },
     paymentMethods: () =>
       shopFetch<{
@@ -52,9 +57,9 @@ export function getShop() {
           address: string;
           decimals: number;
         }[];
-      }>("/api/shop/payment-methods"),
-    order: (id: string) => shopFetch<{ order: Order }>(`/api/shop/orders/${id}`),
-    orders: () => shopFetch<{ orders: Order[] }>("/api/shop/orders"),
+      }>(base, "/api/shop/payment-methods"),
+    order: (id: string) => shopFetch<{ order: Order }>(base, `/api/shop/orders/${id}`),
+    orders: () => shopFetch<{ orders: Order[] }>(base, "/api/shop/orders"),
   };
 }
 
@@ -69,6 +74,7 @@ export function getShop() {
  * (poll order_status).
  */
 export async function placeAndPayOrder(
+  base: string,
   items: { product_id: string; qty: number }[],
   chainId: number,
   tokenAddress: string,
@@ -76,7 +82,7 @@ export async function placeAndPayOrder(
   const { order, payment_instructions } = await shopFetch<{
     order: Order;
     payment_instructions: PaymentInstructions;
-  }>("/api/shop/orders", {
+  }>(base, "/api/shop/orders", {
     method: "POST",
     body: JSON.stringify({
       items,
@@ -102,7 +108,7 @@ export async function placeAndPayOrder(
     signature: packSignature(signature),
   });
 
-  const attached = await shopFetch<{ order: Order }>(`/api/shop/orders/${order.id}/payment`, {
+  const attached = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${order.id}/payment`, {
     method: "POST",
     body: JSON.stringify({ rail0_id: payment.rail0_id }),
   });

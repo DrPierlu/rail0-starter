@@ -101,8 +101,7 @@ pnpm test        # Vitest unit tests
    `UPSTASH_REDIS_REST_URL`/`_TOKEN`). When those are present the order/cart
    store automatically lives in a single Redis key instead of `.data/`.
 3. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
-   `BUYER_PRIVATE_KEY`, `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`
-   (`APP_URL` is derived from the Vercel production URL automatically).
+   `BUYER_PRIVATE_KEY`, `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`.
 4. Make sure the seller wallet is registered as a payee on that gateway with
    its tokens active and holds gas, and the buyer wallet holds the stablecoin.
 
