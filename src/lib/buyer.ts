@@ -1,4 +1,4 @@
-import { Rail0Client, type SigningPayload } from "@rail0/sdk";
+import { buildSiweMessage, Rail0Client, type SigningPayload } from "@rail0/sdk";
 import { env } from "./env";
 import { clearSigning, getOrder, getSigning, type Order, putSigning } from "./store";
 
@@ -9,6 +9,11 @@ import { clearSigning, getOrder, getSigning, type Order, putSigning } from "./st
 // signature stash in the store), never through the model's context where a
 // mangled hex digit would burn the payment. The checkout is therefore three
 // tool steps, each pausing for the browser to sign.
+
+// The statement POST /auth requires, verbatim. The gateway asserts it exactly
+// (gateway#147), which is what stops a login proof from being replayed to register
+// a wallet — so this is a protocol constant, not a UI string to reword.
+const SIWE_LOGIN_STATEMENT = "Sign in to RAIL0";
 
 interface PaymentInstructions {
   payee: string;
@@ -68,18 +73,26 @@ function bareClient(): Rail0Client {
 }
 
 /**
- * The exact EIP-4361 text the browser must sign. Built server-side so the
- * nonce comes straight from the gateway, in the one layout the gateway's SIWE
- * parser accepts: checksummed address, and — with no statement — a DOUBLE
- * blank line between the address and the URI field (verified against the
- * ruby siwe gem; a single blank line is rejected as invalid input).
+ * The exact EIP-4361 text the browser must sign. Built server-side so the nonce
+ * comes straight from the gateway.
+ *
+ * Delegates to the SDK's builder rather than assembling the text here. The
+ * hand-rolled version had reverse-engineered the ruby siwe gem's layout — down to
+ * the DOUBLE blank line a missing statement leaves — and that missing statement is
+ * exactly what broke it: gateway#147 made proofs purpose-bound, so POST /auth now
+ * requires the statement to be `Sign in to RAIL0` and refuses a statement-less
+ * message with 422 siwe_purpose_mismatch. Signing the same bytes as every other
+ * rail0 client is the point; owning a copy of the format never was.
  */
 function siweMessage(domain: string, uri: string, address: string, nonce: string): string {
-  return (
-    `${domain} wants you to sign in with your Ethereum account:\n${address}\n` +
-    `\n\nURI: ${uri}\nVersion: 1\nChain ID: ${env().SIWE_CHAIN_ID}\n` +
-    `Nonce: ${nonce}\nIssued At: ${new Date().toISOString()}`
-  );
+  return buildSiweMessage({
+    domain,
+    address,
+    uri,
+    chainId: env().SIWE_CHAIN_ID,
+    nonce,
+    statement: SIWE_LOGIN_STATEMENT,
+  });
 }
 
 /**
