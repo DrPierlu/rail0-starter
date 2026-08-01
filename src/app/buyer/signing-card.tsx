@@ -51,7 +51,9 @@ export function SigningCard({
       const signature = isLogin
         ? await wallet.signMessage(output.siwe_message)
         : await wallet.signTypedData(output.signing_payload);
-      const res = await fetch(`/api/shop/orders/${output.order_id}/signature`, {
+      // The AGENT's endpoint, not the merchant's (/api/shop). The signature is for
+      // the buyer's own gateway session; the merchant has no part in it. (#6)
+      const res = await fetch(`/api/checkout/${output.order_id}/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: isLogin ? "siwe" : "eip3009", signature }),

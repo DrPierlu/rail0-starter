@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { removeFromCart } from "../../src/lib/store";
+import { removeFromCart } from "../lib/cart";
 
 export default defineTool({
   description: "Remove a product from the cart (all of it, or just `qty` units).",

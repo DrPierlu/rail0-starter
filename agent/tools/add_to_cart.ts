@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProduct } from "../../src/lib/catalog";
-import { addToCart } from "../../src/lib/store";
+import { addToCart } from "../lib/cart";
 
 export default defineTool({
   description: "Add a product (by id from list_products) to the cart.",

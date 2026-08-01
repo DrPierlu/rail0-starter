@@ -1,8 +1,8 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { submitSignedPayment } from "../../src/lib/buyer";
-import { clearCart } from "../../src/lib/store";
 import { shopBase } from "../lib/base";
+import { clearCart } from "../lib/cart";
 
 export default defineTool({
   description:

@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { clearCart } from "../../src/lib/store";
+import { clearCart } from "../lib/cart";
 
 export default defineTool({
   description: "Empty the cart entirely.",

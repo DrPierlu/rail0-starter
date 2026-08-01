@@ -1,6 +1,7 @@
 import { buildSiweMessage, Rail0Client, type SigningPayload } from "@rail0/sdk";
+import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
-import { clearSigning, getOrder, getSigning, type Order, putSigning } from "./store";
+import { getOrder, type Order } from "./store";
 
 // Buyer-side payment flow — KEYLESS on this branch: the server never holds the
 // buyer's private key. Every buyer signature (the SIWE login and the EIP-3009

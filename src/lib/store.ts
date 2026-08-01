@@ -2,8 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// A deliberately tiny single-user persistence layer: one JSON document holding
-// the cart and the orders, rewritten on every change, behind a pluggable
+// The MERCHANT's store: one JSON document holding its orders, rewritten on every
+// change, behind a pluggable
+//
+// It used to hold the cart and the checkout signing hand-off too. Both moved out:
+// the cart is buyer state and now lives in the agent's session (agent/lib/cart.ts,
+// #5), and the signing entries carried the buyer's gateway JWT into the merchant's
+// hands (src/lib/checkout-signing.ts, #6). What is left is what a merchant
+// legitimately owns.
 // driver. Local dev uses a file (.data/store.json); when Redis REST
 // credentials are present (Vercel KV / Upstash / Redis Cloud on Vercel) the
 // same document lives in a single Redis key instead, which is what makes the
@@ -20,6 +26,10 @@ export type OrderState =
   | "cancelled" // voided — escrow returned to the buyer
   | "failed"; // an on-chain operation failed (see error)
 
+// The shape of a purchased line. The agent has its own CartLine (agent/lib/cart.ts)
+// and that duplication is CORRECT once these are two services: each owns the shape
+// it puts on the wire, and neither can reach into the other's types. Here it is
+// what an ORDER records; there it is what a buyer is still assembling.
 export interface CartLine {
   product_id: string;
   name: string;
@@ -51,32 +61,11 @@ export interface Order {
   updated_at: string;
 }
 
-/**
- * Browser-produced artifacts of an in-flight keyless checkout, keyed by order.
- * The buyer's key never reaches the server, so its SIGNATURES (public data —
- * they end up on-chain / at the gateway anyway) are handed over out-of-band
- * through the storefront and parked here between the checkout steps, instead
- * of round-tripping through the model's context where a mangled hex digit
- * would burn the payment.
- */
-export interface SigningEntry {
-  /** Checksummed buyer address, fixed at checkout_begin. */
-  address: string;
-  siwe_message: string;
-  siwe_signature?: string;
-  /** Buyer-session JWT, cached between the create and submit steps. */
-  auth_token?: string;
-  rail0_id?: string;
-  eip3009_signature?: string;
-}
-
 interface StoreData {
-  cart: CartLine[];
   orders: Order[];
-  signing?: Record<string, SigningEntry>;
 }
 
-const EMPTY: StoreData = { cart: [], orders: [] };
+const EMPTY: StoreData = { orders: [] };
 
 interface StoreDriver {
   read(): Promise<StoreData>;
@@ -147,46 +136,6 @@ function driver(): StoreDriver {
   return redisCredentials() ? redisDriver : fileDriver;
 }
 
-// ── Cart ─────────────────────────────────────────────────────────────
-
-export async function getCart(): Promise<CartLine[]> {
-  return (await driver().read()).cart;
-}
-
-export async function addToCart(line: CartLine): Promise<CartLine[]> {
-  const store = driver();
-  const data = await store.read();
-  const existing = data.cart.find((l) => l.product_id === line.product_id);
-  if (existing) {
-    existing.qty += line.qty;
-  } else {
-    data.cart.push(line);
-  }
-  await store.write(data);
-  return data.cart;
-}
-
-export async function removeFromCart(productId: string, qty?: number): Promise<CartLine[]> {
-  const store = driver();
-  const data = await store.read();
-  const line = data.cart.find((l) => l.product_id === productId);
-  if (line) {
-    line.qty -= qty ?? line.qty;
-    if (line.qty <= 0) {
-      data.cart = data.cart.filter((l) => l.product_id !== productId);
-    }
-  }
-  await store.write(data);
-  return data.cart;
-}
-
-export async function clearCart(): Promise<void> {
-  const store = driver();
-  const data = await store.read();
-  data.cart = [];
-  await store.write(data);
-}
-
 // ── Orders ───────────────────────────────────────────────────────────
 
 export async function createOrder(
@@ -232,44 +181,4 @@ export async function updateOrder(
   Object.assign(order, patch, { updated_at: new Date().toISOString() });
   await store.write(data);
   return order;
-}
-
-// ── Checkout signing hand-off ────────────────────────────────────────
-
-export async function getSigning(orderId: string): Promise<SigningEntry | undefined> {
-  return (await driver().read()).signing?.[orderId];
-}
-
-/** Create or merge the signing entry for an order. */
-export async function putSigning(
-  orderId: string,
-  patch: Partial<SigningEntry> & Pick<SigningEntry, "address" | "siwe_message">,
-): Promise<SigningEntry>;
-export async function putSigning(
-  orderId: string,
-  patch: Partial<SigningEntry>,
-): Promise<SigningEntry | undefined>;
-export async function putSigning(
-  orderId: string,
-  patch: Partial<SigningEntry>,
-): Promise<SigningEntry | undefined> {
-  const store = driver();
-  const data = await store.read();
-  data.signing ??= {};
-  const existing = data.signing[orderId];
-  if (!existing && (!patch.address || !patch.siwe_message)) return undefined;
-  const entry = { ...(existing ?? {}), ...patch } as SigningEntry;
-  data.signing[orderId] = entry;
-  await store.write(data);
-  return entry;
-}
-
-/** Drop an order's signing entry once the checkout settles (or is abandoned). */
-export async function clearSigning(orderId: string): Promise<void> {
-  const store = driver();
-  const data = await store.read();
-  if (data.signing?.[orderId]) {
-    delete data.signing[orderId];
-    await store.write(data);
-  }
 }

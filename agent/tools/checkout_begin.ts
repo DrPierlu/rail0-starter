@@ -1,8 +1,8 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { beginCheckout } from "../../src/lib/buyer";
-import { getCart } from "../../src/lib/store";
 import { shopBase } from "../lib/base";
+import { getCart } from "../lib/cart";
 
 export default defineTool({
   description:
