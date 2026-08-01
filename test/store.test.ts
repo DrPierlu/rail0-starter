@@ -2,17 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import {
-  addToCart,
-  clearCart,
-  createOrder,
-  getCart,
-  getOrder,
-  listOrders,
-  type OrderToken,
-  removeFromCart,
-  updateOrder,
-} from "@/lib/store";
+// The cart is no longer here — it belongs to the agent now (test/cart.test.ts, #5).
+import { createOrder, getOrder, listOrders, type OrderToken, updateOrder } from "@/lib/store";
 
 const TOKEN: OrderToken = {
   chain_id: 84532,
@@ -33,28 +24,6 @@ beforeAll(() => {
 afterAll(() => {
   process.chdir(originalCwd);
   rmSync(dir, { recursive: true, force: true });
-});
-
-beforeEach(async () => {
-  await clearCart();
-});
-
-describe("cart", () => {
-  it("adds, merges, removes and clears lines", async () => {
-    await addToCart({ product_id: "a", name: "A", price: "1.00", qty: 1 });
-    await addToCart({ product_id: "a", name: "A", price: "1.00", qty: 2 });
-    await addToCart({ product_id: "b", name: "B", price: "2.00", qty: 1 });
-    expect(await getCart()).toHaveLength(2);
-    expect((await getCart()).find((l) => l.product_id === "a")?.qty).toBe(3);
-
-    await removeFromCart("a", 1);
-    expect((await getCart()).find((l) => l.product_id === "a")?.qty).toBe(2);
-    await removeFromCart("a");
-    expect((await getCart()).find((l) => l.product_id === "a")).toBeUndefined();
-
-    await clearCart();
-    expect(await getCart()).toHaveLength(0);
-  });
 });
 
 describe("orders", () => {

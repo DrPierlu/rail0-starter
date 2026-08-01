@@ -1,7 +1,9 @@
 import { checksumAddress, type Eip3009Signature, Rail0Client } from "@rail0/sdk";
 import { env } from "./env";
 
-type Role = "buyer" | "seller";
+// Seller only on this branch: the buyer's key never reaches the server, so
+// there is no buyer role to hold a server-side session for (see lib/buyer.ts).
+type Role = "seller";
 
 interface Session {
   client: Rail0Client;
@@ -18,8 +20,8 @@ if (!globalSessions.__rail0Sessions) {
 }
 const sessions = globalSessions.__rail0Sessions;
 
-function privateKeyFor(role: Role): string {
-  return role === "buyer" ? env().BUYER_PRIVATE_KEY : env().SELLER_PRIVATE_KEY;
+function privateKeyFor(_role: Role): string {
+  return env().SELLER_PRIVATE_KEY;
 }
 
 export function addressFor(role: Role): string {

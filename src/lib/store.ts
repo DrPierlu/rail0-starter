@@ -2,8 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// A deliberately tiny single-user persistence layer: one JSON document holding
-// the cart and the orders, rewritten on every change, behind a pluggable
+// The MERCHANT's store: one JSON document holding its orders, rewritten on every
+// change, behind a pluggable
+//
+// It used to hold the cart and the checkout signing hand-off too. Both moved out:
+// the cart is buyer state and now lives in the agent's session (agent/lib/cart.ts,
+// #5), and the signing entries carried the buyer's gateway JWT into the merchant's
+// hands (src/lib/checkout-signing.ts, #6). What is left is what a merchant
+// legitimately owns.
 // driver. Local dev uses a file (.data/store.json); when Redis REST
 // credentials are present (Vercel KV / Upstash / Redis Cloud on Vercel) the
 // same document lives in a single Redis key instead, which is what makes the
@@ -20,6 +26,10 @@ export type OrderState =
   | "cancelled" // voided — escrow returned to the buyer
   | "failed"; // an on-chain operation failed (see error)
 
+// The shape of a purchased line. The agent has its own CartLine (agent/lib/cart.ts)
+// and that duplication is CORRECT once these are two services: each owns the shape
+// it puts on the wire, and neither can reach into the other's types. Here it is
+// what an ORDER records; there it is what a buyer is still assembling.
 export interface CartLine {
   product_id: string;
   name: string;
@@ -52,11 +62,10 @@ export interface Order {
 }
 
 interface StoreData {
-  cart: CartLine[];
   orders: Order[];
 }
 
-const EMPTY: StoreData = { cart: [], orders: [] };
+const EMPTY: StoreData = { orders: [] };
 
 interface StoreDriver {
   read(): Promise<StoreData>;
@@ -125,46 +134,6 @@ const redisDriver: StoreDriver = {
 
 function driver(): StoreDriver {
   return redisCredentials() ? redisDriver : fileDriver;
-}
-
-// ── Cart ─────────────────────────────────────────────────────────────
-
-export async function getCart(): Promise<CartLine[]> {
-  return (await driver().read()).cart;
-}
-
-export async function addToCart(line: CartLine): Promise<CartLine[]> {
-  const store = driver();
-  const data = await store.read();
-  const existing = data.cart.find((l) => l.product_id === line.product_id);
-  if (existing) {
-    existing.qty += line.qty;
-  } else {
-    data.cart.push(line);
-  }
-  await store.write(data);
-  return data.cart;
-}
-
-export async function removeFromCart(productId: string, qty?: number): Promise<CartLine[]> {
-  const store = driver();
-  const data = await store.read();
-  const line = data.cart.find((l) => l.product_id === productId);
-  if (line) {
-    line.qty -= qty ?? line.qty;
-    if (line.qty <= 0) {
-      data.cart = data.cart.filter((l) => l.product_id !== productId);
-    }
-  }
-  await store.write(data);
-  return data.cart;
-}
-
-export async function clearCart(): Promise<void> {
-  const store = driver();
-  const data = await store.read();
-  data.cart = [];
-  await store.write(data);
 }
 
 // ── Orders ───────────────────────────────────────────────────────────

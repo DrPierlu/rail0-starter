@@ -4,6 +4,31 @@ A fullstack template showing an **AI buyer agent** purchasing physical goods
 from a **merchant server**, paying in stablecoins through the
 [rail0](https://github.com/commercelayer/rail0) payment gateway.
 
+> **This branch (`rail0-starter-eve`) is the [Vercel eve](https://eve.dev)
+> variant.** The buyer agent runs as a durable eve agent instead of an inline
+> AI SDK loop. What changes vs `main`:
+>
+> - The agent lives in `agent/` (instructions, `agent.ts`, one file per tool);
+>   `withEve()` in `next.config.ts` mounts it on this app's origin, so
+>   `pnpm dev` runs Next and the agent as one dev server and one Vercel deploy.
+> - The chat page talks to it with `useEveAgent` (`eve/react`); the session is
+>   durable server-side and survives cold starts and deploys. `sessionStorage`
+>   only parks the resumable cursor + rendered event log across a role switch.
+> - **The buyer's key never touches the server.** There is no
+>   `BUYER_PRIVATE_KEY`: you connect the buyer wallet in the browser (MetaMask,
+>   or a pasted key that stays in the tab), and the checkout runs in three tool
+>   steps with two signing cards in chat — SIWE sign-in, then the EIP-3009
+>   payment authorization. Signatures reach the storefront out-of-band
+>   (`POST /api/shop/orders/:id/signature`), never through the model's context.
+>   The seller key stays server-side: that is the merchant's own backend
+>   signing its own transactions.
+> - The model is still called directly via `@ai-sdk/anthropic`
+>   (`ANTHROPIC_API_KEY`), no AI Gateway needed in dev.
+> - Tools run in the eve service, outside any Next request — so the storefront
+>   base comes from `SHOP_URL` (default `http://localhost:3000`, or the Vercel
+>   production URL when deployed), not from the request origin as on `main`.
+> - `bin/dev` exports `.env.local` so the agent service sees the same env.
+
 Unlike pay-per-request protocols (x402 and friends), rail0 brings the
 **authorize → capture** lifecycle of card networks to stablecoin payments: at
 checkout the buyer's funds are locked in an **on-chain escrow**, and the
