@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // The cart is no longer here — it belongs to the agent now (test/cart.test.ts, #5).
 import { createOrder, getOrder, listOrders, type OrderToken, updateOrder } from "@/lib/store";
 

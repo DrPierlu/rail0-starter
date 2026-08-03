@@ -1,4 +1,4 @@
-import { type PaymentDetail, signTransaction } from "@rail0/sdk";
+import { formatAmount, type PaymentDetail, signTransaction } from "@rail0/sdk";
 import { env } from "./env";
 import { addressFor, clientFor } from "./rail0";
 import { getOrder, type Order, type OrderState, updateOrder } from "./store";
@@ -78,9 +78,15 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
     throw new ShopError(422, "payment token does not match the order");
   }
   if (payment.amount !== order.total_base) {
+    // Human decimals, not naked base units: this message travels up to the
+    // chat, and "2600000 does not match 2610000" is unreadable exactly where
+    // the numbers matter most. Raw base units stay as a debugging adjunct.
+    const human = (base: string) =>
+      `${formatAmount(base, order.token.decimals)} ${order.token.symbol}`;
     throw new ShopError(
       422,
-      `payment amount ${payment.amount} does not match order total ${order.total_base}`,
+      `payment amount ${human(payment.amount)} does not match the order total ` +
+        `${human(order.total_base)} (base units: ${payment.amount} vs ${order.total_base})`,
     );
   }
   if (payment.mode !== "authorize") {

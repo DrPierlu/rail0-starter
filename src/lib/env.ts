@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+/**
+ * A missing/malformed environment variable, distinct from every runtime error:
+ * the fix is in .env.local, not in the request. errorResponse maps it to a 500
+ * that SAYS so — before, the ZodError escaped as a bare non-JSON 500 whose
+ * downstream symptom was the agent showing `Unexpected token 'I', "Internal
+ * S"... is not valid JSON` on the very first tool call of a conversation.
+ */
+export class ConfigError extends Error {}
+
 const schema = z.object({
   GATEWAY_URL: z.string().url().default("http://localhost:9292"),
   // No BUYER_PRIVATE_KEY on this branch, by design: the buyer signs in the
@@ -20,12 +29,19 @@ let cached: Env | null = null;
 // secrets being present — they are only required once a route actually runs.
 export function env(): Env {
   if (!cached) {
-    cached = schema.parse({
+    const parsed = schema.safeParse({
       GATEWAY_URL: process.env.GATEWAY_URL || undefined,
       SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
     });
+    if (!parsed.success) {
+      const detail = parsed.error.issues
+        .map((issue) => `${issue.path.join(".") || "env"}: ${issue.message}`)
+        .join("; ");
+      throw new ConfigError(`configuration error — check .env.local: ${detail}`);
+    }
+    cached = parsed.data;
   }
   return cached;
 }
