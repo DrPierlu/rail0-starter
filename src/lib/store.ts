@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { makeDocStore } from "@/lib/doc-store";
 
 // The MERCHANT's store: one JSON document holding its orders, rewritten on every
 // change, behind a pluggable
@@ -57,6 +56,11 @@ export interface Order {
   rail0_id?: string;
   payment_status?: string;
   error?: string;
+  /**
+   * Set (in the API response only, never persisted) when the gateway refresh
+   * failed and this is the last stored snapshot rather than live state.
+   */
+  stale?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -65,76 +69,14 @@ interface StoreData {
   orders: Order[];
 }
 
-const EMPTY: StoreData = { orders: [] };
-
-interface StoreDriver {
-  read(): Promise<StoreData>;
-  write(data: StoreData): Promise<void>;
-}
-
-// ── File driver (local dev) ──────────────────────────────────────────
-
-// Resolved lazily so tests can point the store at a temp directory by
-// changing the working directory before the first call.
-function dataFile(): string {
-  return path.join(process.cwd(), ".data", "store.json");
-}
-
-const fileDriver: StoreDriver = {
-  async read() {
-    try {
-      return JSON.parse(readFileSync(dataFile(), "utf8")) as StoreData;
-    } catch {
-      return structuredClone(EMPTY);
-    }
-  },
-  async write(data) {
-    const file = dataFile();
-    mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(data, null, 2));
-    renameSync(tmp, file);
-  },
-};
-
-// ── Redis REST driver (Vercel KV / Upstash) ──────────────────────────
-
-const REDIS_KEY = "rail0-starter:store";
-
-function redisCredentials(): { url: string; token: string } | null {
-  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
-  return url && token ? { url, token } : null;
-}
-
-// Single-command Upstash REST call: POST the command as a JSON array.
-async function redis(command: unknown[]): Promise<unknown> {
-  const { url, token } = redisCredentials() as { url: string; token: string };
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(command),
-  });
-  const body = (await response.json()) as { result?: unknown; error?: string };
-  if (!response.ok || body.error) {
-    throw new Error(`store redis error: ${body.error ?? response.status}`);
-  }
-  return body.result;
-}
-
-const redisDriver: StoreDriver = {
-  async read() {
-    const raw = (await redis(["GET", REDIS_KEY])) as string | null;
-    return raw ? (JSON.parse(raw) as StoreData) : structuredClone(EMPTY);
-  },
-  async write(data) {
-    await redis(["SET", REDIS_KEY, JSON.stringify(data)]);
-  },
-};
-
-function driver(): StoreDriver {
-  return redisCredentials() ? redisDriver : fileDriver;
-}
+// Same document, two drivers — the driver logic lives in doc-store.ts so the
+// checkout signing stash rides the identical file/Redis switch instead of a
+// file-only copy of it.
+const store = makeDocStore<StoreData>({
+  file: "store.json",
+  redisKey: "rail0-starter:store",
+  empty: () => ({ orders: [] }),
+});
 
 // ── Orders ───────────────────────────────────────────────────────────
 
@@ -144,7 +86,6 @@ export async function createOrder(
   totalBase: string,
   token: OrderToken,
 ): Promise<Order> {
-  const store = driver();
   const data = await store.read();
   const now = new Date().toISOString();
   const order: Order = {
@@ -163,18 +104,17 @@ export async function createOrder(
 }
 
 export async function getOrder(id: string): Promise<Order | undefined> {
-  return (await driver().read()).orders.find((o) => o.id === id || o.rail0_id === id);
+  return (await store.read()).orders.find((o) => o.id === id || o.rail0_id === id);
 }
 
 export async function listOrders(): Promise<Order[]> {
-  return (await driver().read()).orders;
+  return (await store.read()).orders;
 }
 
 export async function updateOrder(
   id: string,
   patch: Partial<Omit<Order, "id" | "created_at">>,
 ): Promise<Order | undefined> {
-  const store = driver();
   const data = await store.read();
   const order = data.orders.find((o) => o.id === id);
   if (!order) return undefined;

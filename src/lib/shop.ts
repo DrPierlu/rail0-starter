@@ -61,7 +61,13 @@ export async function listPaymentMethods(): Promise<PaymentMethod[]> {
 export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string): Promise<Order> {
   const order = await getOrder(orderId);
   if (!order) throw new ShopError(404, "order not found");
-  if (order.state !== "awaiting_payment") {
+  // `authorizing` with the SAME rail0_id is a RETRY, not a conflict: the
+  // write-ahead below binds the payment to the order before the broadcast, so
+  // a submit whose broadcast (or whose response) died mid-flight lands here
+  // again with the order already advanced. Anything else in a non-initial
+  // state stays a 409.
+  const retrying = order.state === "authorizing" && order.rail0_id === rail0Id;
+  if (!retrying && order.state !== "awaiting_payment") {
     throw new ShopError(409, `order is ${order.state}, expected awaiting_payment`);
   }
 
@@ -93,8 +99,24 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
     throw new ShopError(422, "payment mode must be authorize (escrow)");
   }
   if (payment.status !== "signed") {
+    // On a retry a non-signed status means the earlier broadcast DID land —
+    // sync the order from the gateway instead of rejecting the recovery.
+    if (retrying) return await refreshOrder(order.id);
     throw new ShopError(422, `payment is ${payment.status}, expected signed`);
   }
+
+  // WRITE-AHEAD: bind the payment to the order BEFORE the broadcast. The old
+  // order (write only after `authorize` returned) had an unrecoverable gap: if
+  // the broadcast succeeded but the response — or the write — was lost, the
+  // buyer's funds sat in escrow while the order stayed `awaiting_payment` with
+  // no rail0_id, so nothing could ever reconcile it and the merchant did not
+  // know the payment existed. Written first, the worst crash leaves an
+  // `authorizing` order that refreshOrder/a retry can always resolve.
+  await applyOrder(order.id, {
+    rail0_id: rail0Id,
+    state: "authorizing",
+    payment_status: payment.status,
+  });
 
   const prep = await seller.payments.authorizePrepare(rail0Id);
   if (!prep.unsigned_transaction) {
@@ -107,11 +129,7 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
     ),
   });
 
-  return await applyOrder(order.id, {
-    rail0_id: rail0Id,
-    state: "authorizing",
-    payment_status: payment.status,
-  });
+  return (await getOrder(order.id)) as Order;
 }
 
 /** Capture the full escrowed amount — the merchant settles after fulfilment. */
