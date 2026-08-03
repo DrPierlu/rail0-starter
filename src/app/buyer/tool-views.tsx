@@ -61,7 +61,12 @@ export function ToolView({ part }: { part: ToolPart }) {
       return <CartTable cart={(output?.cart as CartLine[]) ?? []} />;
     case "payment_options":
       return <PaymentOptions methods={(output?.payment_methods as PaymentMethod[]) ?? []} />;
-    case "checkout":
+    // checkout_submit is the moment funds move into escrow — the demo's
+    // payoff. It used to match a "checkout" case for a tool that no longer
+    // exists (the flow split into begin/payment/submit), so the settle step
+    // fell through to the generic JSON chip and the live OrderCard
+    // (authorizing -> in_escrow polling) never appeared.
+    case "checkout_submit":
       return <OrderCard orderId={output?.order_id as string} />;
     case "order_status": {
       const order = output?.order as Order | undefined;
@@ -212,7 +217,7 @@ export function ToolChip({ part }: { part: ToolPart }) {
   const name = part.type.replace(/^tool-/, "");
   const done = part.state === "output-available";
   const error = part.state === "output-error";
-  const isPayment = name === "checkout";
+  const isPayment = name.startsWith("checkout");
 
   return (
     <div className="rounded-lg border border-neutral-200 dark:border-neutral-800">
