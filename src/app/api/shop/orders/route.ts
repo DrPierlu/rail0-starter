@@ -23,7 +23,15 @@ const createSchema = z.object({
 export async function GET() {
   try {
     const stored = await listOrders();
-    const orders = await Promise.all(stored.map((o) => refreshOrder(o.id)));
+    // allSettled, not all: refreshOrder calls the gateway per order, and one
+    // sick order (a rail0_id the gateway 404s, one timeout) used to fail the
+    // whole list — the merchant panel showed the error and ZERO orders for as
+    // long as that order existed. A failed refresh now falls back to the
+    // stored snapshot, flagged stale.
+    const results = await Promise.allSettled(stored.map((o) => refreshOrder(o.id)));
+    const orders = results.map((r, i) =>
+      r.status === "fulfilled" ? r.value : { ...stored[i], stale: true },
+    );
     return NextResponse.json({ orders });
   } catch (error) {
     return errorResponse(error);

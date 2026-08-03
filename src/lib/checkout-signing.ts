@@ -1,5 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { makeDocStore } from "@/lib/doc-store";
 
 /**
  * In-flight keyless-checkout state, owned by the BUYER AGENT side.
@@ -17,7 +16,7 @@ import path from "node:path";
  * And it put a credential across a trust boundary. `auth_token` is the buyer's
  * gateway JWT: 24 hours, and `payer_must_be_caller` already satisfied. Whoever owns
  * that store can act AS the buyer on the gateway — create payments, sign them, read
- * the buyer's whole payment history. This branch's premise is that the server never
+ * the buyer's whole payment history. This app's premise is that the server never
  * holds the buyer's private KEY; it did not, and instead held something that for a
  * day is close enough.
  *
@@ -25,10 +24,15 @@ import path from "node:path";
  * gateway requires the payer to be the caller, so the buyer's own side must create
  * and sign the payment. The merchant never sees it.
  *
- * WHY A FILE AND NOT eve SESSION STATE: `defineState` only resolves inside authored
- * runtime execution (tools, hooks). The browser hands its signature to a plain HTTP
- * route, which is not that — so the two ends need a store both can reach. Scoped to
- * this deployable rather than shared with the merchant is the whole point.
+ * WHY A DOC STORE AND NOT eve SESSION STATE: `defineState` only resolves inside
+ * authored runtime execution (tools, hooks). The browser hands its signature to a
+ * plain HTTP route, which is not that — so the two ends need a store both can
+ * reach. It rides the SAME file/Redis drivers as the merchant store (its own
+ * document and key, not a section of the merchant's — co-locating them is how the
+ * ownership blurred in the first place): the file-only version it briefly had
+ * could not work on Vercel at all — `.data/` is read-only there (`EROFS` on
+ * `checkout_begin`), and the Next routes and the agent service are separate
+ * instances, so a file written by one was invisible to the other.
  *
  * The SIGNATURES themselves are public artifacts (they end up on-chain and at the
  * gateway), so parking them is not the risk; routing them through the model's
@@ -43,31 +47,42 @@ export interface SigningEntry {
   auth_token?: string;
   rail0_id?: string;
   eip3009_signature?: string;
+  /** Unix seconds of the first write — the TTL clock (see EXPIRY_SECS). */
+  created_at: number;
 }
 
 type SigningData = Record<string, SigningEntry>;
 
-// Its own file, not a section of the merchant's document: co-locating them is how
-// the ownership blurred in the first place.
-const FILE = path.join(process.cwd(), ".data", "checkout-signing.json");
+/**
+ * Entries expire with the credential they hold: `clearSigning` only runs on the
+ * happy path, so an abandoned checkout used to park the buyer's 24h JWT on disk
+ * indefinitely. The gateway token is the longest-lived thing in the entry —
+ * once it has lapsed the stash is both useless and harmless, so it is purged
+ * on the next read.
+ */
+const EXPIRY_SECS = 24 * 60 * 60;
 
-function read(): SigningData {
-  try {
-    return JSON.parse(readFileSync(FILE, "utf8")) as SigningData;
-  } catch {
-    return {};
-  }
-}
+const store = makeDocStore<SigningData>({
+  file: "checkout-signing.json",
+  redisKey: "rail0-starter:checkout-signing",
+  empty: () => ({}),
+});
 
-function write(data: SigningData): void {
-  mkdirSync(path.dirname(FILE), { recursive: true });
-  const tmp = `${FILE}.tmp`;
-  writeFileSync(tmp, JSON.stringify(data, null, 2));
-  renameSync(tmp, FILE);
+const expired = (entry: SigningEntry) =>
+  Math.floor(Date.now() / 1000) - (entry.created_at ?? 0) > EXPIRY_SECS;
+
+// Read with lazy expiry: expired entries are dropped, and the purge is
+// persisted only when it removed something (no write amplification on the
+// common empty/fresh case).
+async function read(): Promise<SigningData> {
+  const data = await store.read();
+  const live = Object.fromEntries(Object.entries(data).filter(([, entry]) => !expired(entry)));
+  if (Object.keys(live).length !== Object.keys(data).length) await store.write(live);
+  return live;
 }
 
 export async function getSigning(orderId: string): Promise<SigningEntry | undefined> {
-  return read()[orderId];
+  return (await read())[orderId];
 }
 
 /**
@@ -87,18 +102,23 @@ export async function putSigning(
   orderId: string,
   patch: Partial<SigningEntry>,
 ): Promise<SigningEntry | undefined> {
-  const data = read();
+  const data = await read();
   const existing = data[orderId];
   if (!existing && (!patch.address || !patch.siwe_message)) return undefined;
-  const entry = { ...(existing ?? {}), ...patch } as SigningEntry;
+  const entry = {
+    ...(existing ?? {}),
+    ...patch,
+    // The TTL clock is the FIRST write's, whatever a later patch carries.
+    created_at: existing?.created_at ?? Math.floor(Date.now() / 1000),
+  } as SigningEntry;
   data[orderId] = entry;
-  write(data);
+  await store.write(data);
   return entry;
 }
 
 /** Drop the entry once the checkout settles or is abandoned — it holds a JWT. */
 export async function clearSigning(orderId: string): Promise<void> {
-  const data = read();
+  const data = await read();
   delete data[orderId];
-  write(data);
+  await store.write(data);
 }
