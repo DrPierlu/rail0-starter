@@ -32,11 +32,26 @@ async function shopFetch<T>(base: string, path: string, init?: RequestInit): Pro
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  const body = (await response.json()) as T & { error?: string };
-  if (!response.ok) {
-    throw new Error(body.error ?? `${path} failed with ${response.status}`);
+  // Never .json() unconditionally: an unexpected non-JSON body (a bare 500, an
+  // HTML error page from a proxy) used to surface as `SyntaxError: Unexpected
+  // token 'I', "Internal S"... is not valid JSON` — masking the actual error.
+  const text = await response.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = undefined;
   }
-  return body;
+  if (!response.ok) {
+    const error = (body as { error?: string } | undefined)?.error;
+    throw new Error(
+      error ?? `${path} failed with ${response.status}: ${text.slice(0, 200) || "empty body"}`,
+    );
+  }
+  if (body === undefined) {
+    throw new Error(`${path} answered ${response.status} with a non-JSON body`);
+  }
+  return body as T;
 }
 
 export function getShop(base: string) {
