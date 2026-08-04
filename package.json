@@ -19,9 +19,9 @@
     "@rail0/sdk": "file:vendor/rail0-sdk-1.0.0.tgz",
     "ai": "^7.0.48",
     "eve": "^0.29.5",
-    "next": "15.5.8",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "shiki": "^3.23.0",
     "streamdown": "^1.6.11",
     "zod": "^4.4.3"
