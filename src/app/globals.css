@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind only scans this project's own files, so the utility classes Streamdown
+   emits from inside node_modules were being purged — its markdown (lists, tables,
+   code blocks) rendered unstyled in the buyer chat. Path is relative from THIS file
+   to the root node_modules. Not a regression from the v2 bump: Tailwind 4 has always
+   needed this for classes that live in a dependency. */
+@source "../../node_modules/streamdown/dist/*.js";
+
 :root {
   --background: #fafafa;
   --foreground: #171717;

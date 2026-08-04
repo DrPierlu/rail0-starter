@@ -22,8 +22,8 @@
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "shiki": "^3.23.0",
-    "streamdown": "^1.6.11",
+    "shiki": "^4.4.1",
+    "streamdown": "^2.5.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
