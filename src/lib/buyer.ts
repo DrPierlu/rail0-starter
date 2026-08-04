@@ -136,7 +136,13 @@ export async function beginCheckout(
 
   const gateway = env().GATEWAY_URL;
   const { nonce } = await bareClient().auth.getNonce();
-  const message = siweMessage(new URL(gateway).host, gateway, buyerAddress, nonce);
+  // hostname, NOT host: the gateway's SIWE domain allow-list holds bare hosts
+  // (Policy.siwe_domains defaults to "localhost"), and it also requires the message's
+  // URI host to equal its domain — a URI host never carries the port, so a domain that
+  // does fails both checks. Both raise SignerMismatch, which surfaces as "the signature
+  // does not match the address": a configuration mismatch wearing a crypto error's
+  // clothes. rail0-cli strips the port for the same reason (siweHost).
+  const message = siweMessage(new URL(gateway).hostname, gateway, buyerAddress, nonce);
 
   await putSigning(order.id, { address: buyerAddress, siwe_message: message });
   return { order, siwe_message: message, instructions: payment_instructions };
