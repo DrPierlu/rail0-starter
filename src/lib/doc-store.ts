@@ -15,6 +15,11 @@ import path from "node:path";
  * agent service are separate instances, so a file written by one was invisible
  * to the other: the exact "checkout hangs with no error" split #6 fixed for
  * the merchant path.
+ *
+ * Sharing the driver was necessary and not sufficient. The file driver resolved its
+ * path from `process.cwd()`, and the agent service's cwd is a per-build snapshot
+ * directory — so locally the split persisted, invisibly, until STARTER_DATA_DIR pinned
+ * both processes to one directory (see dataDir below).
  */
 export interface DocStore<T> {
   read(): Promise<T>;
@@ -50,9 +55,22 @@ export function makeDocStore<T>(opts: {
   /** Fresh empty document, returned when nothing is stored yet. */
   empty: () => T;
 }): DocStore<T> {
-  // Resolved lazily so tests can point the store at a temp directory by
-  // changing the working directory before the first call.
-  const dataFile = () => path.join(process.cwd(), ".data", opts.file);
+  // Resolved lazily so tests can point the store at a temp directory by changing the
+  // working directory before the first call.
+  //
+  // STARTER_DATA_DIR wins over cwd, and it is not a convenience: the eve agent service
+  // is a SEPARATE PROCESS whose cwd is a per-build snapshot
+  // (.eve/dev-runtime/snapshots/<id>/source), so `process.cwd()` alone gave the browser's
+  // deposit and the agent's read two different files — and a fresh, empty one after every
+  // rebuild. The browser signed, the route wrote .data/checkout-signing.json, the agent
+  // read the snapshot's own copy and answered "the sign-in signature has not arrived yet"
+  // forever. bin/dev exports this so both processes resolve the same directory.
+  //
+  // The doc comment above claimed the shared driver had fixed that split. It fixed it
+  // only where Redis is configured; on the file driver in local dev it was still two
+  // files.
+  const dataDir = () => process.env.STARTER_DATA_DIR ?? path.join(process.cwd(), ".data");
+  const dataFile = () => path.join(dataDir(), opts.file);
 
   const fileDriver: DocStore<T> = {
     async read() {

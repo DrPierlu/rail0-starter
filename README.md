@@ -165,6 +165,19 @@ Two pins worth knowing before you bump anything:
   renders unstyled in the buyer chat, and nothing in the build reports it. `biome.json`
   enables `css.parser.tailwindDirectives` so that `@source` is not a parse error.
 
+### The agent runs in a separate process
+
+`withEve()` runs the agent as a sibling dev server, and its cwd is a **per-build
+snapshot** under `.eve/dev-runtime/snapshots/<id>/source`. Anything the app resolves
+relative to `process.cwd()` therefore resolves differently in the two processes — and
+gets a fresh, empty copy after every rebuild.
+
+That is why `bin/dev` exports `STARTER_DATA_DIR` (and `SHOP_URL`): the browser deposits
+checkout signatures through a Next route while the agent's tools read them, and with a
+cwd-relative path those were two different files. The symptom was a checkout stuck on
+*"the sign-in signature has not arrived yet"* with nothing visibly broken. If you start
+the app with a bare `pnpm dev`, set both by hand.
+
 ### After upgrading `eve`
 
 Upgrading eve invalidates any workflow run that was still in flight, and the dev server

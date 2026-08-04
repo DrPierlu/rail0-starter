@@ -44,6 +44,13 @@ set +a
 port=4000
 export SHOP_URL="${SHOP_URL:-http://localhost:$port}"
 
+# Both processes must resolve the SAME data directory. The eve agent service runs with
+# its cwd inside a per-build snapshot (.eve/dev-runtime/snapshots/<id>/source), so a
+# cwd-relative .data/ meant the browser deposited checkout signatures in one file while
+# the agent read another — freshly empty after every rebuild — and the checkout hung on
+# "the sign-in signature has not arrived yet".
+export STARTER_DATA_DIR="${STARTER_DATA_DIR:-$PWD/.data}"
+
 # Next silently moves to the next free port when this one is taken, which would
 # leave SHOP_URL pointing at whoever holds it. Say so rather than let the agent
 # talk to a stranger.
