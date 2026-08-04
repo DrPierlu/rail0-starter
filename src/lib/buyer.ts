@@ -162,8 +162,23 @@ export async function createPaymentForOrder(
   );
 
   const client = bareClient();
-  const auth = await client.auth.verify(entry.siwe_message, entry.siwe_signature);
-  client.setAuthToken(auth.token);
+  // The SIWE nonce is SINGLE-USE, so auth.verify can only ever run once per checkout.
+  // Reuse the token from a previous attempt when there is one: this tool is re-run
+  // whenever anything after it failed (a network blip at payments.create, the browser
+  // losing the dev server, the agent retrying the step), and re-verifying then burns
+  // the flow with 422 nonce_used — "Sign-in nonce already used" — which reads as a
+  // security complaint rather than "this step already ran".
+  let authToken = entry.auth_token;
+  if (!authToken) {
+    const auth = await client.auth.verify(entry.siwe_message, entry.siwe_signature);
+    authToken = auth.token;
+    // Persisted BEFORE anything else can fail. It used to be stored only after
+    // payments.create succeeded, so a failure in between lost the token AND left the
+    // nonce spent: the order could never be paid, by any retry, and the only way out
+    // was a brand-new checkout.
+    await putSigning(orderId, { auth_token: authToken });
+  }
+  client.setAuthToken(authToken);
 
   const payment = await client.payments.create({
     chain_id: order.token.chain_id,
@@ -180,7 +195,7 @@ export async function createPaymentForOrder(
   if (!payment.signing_payload) {
     throw new Error("gateway returned no signing payload for the new payment");
   }
-  await putSigning(orderId, { auth_token: auth.token, rail0_id: payment.rail0_id });
+  await putSigning(orderId, { rail0_id: payment.rail0_id });
   return { rail0_id: payment.rail0_id, signing_payload: payment.signing_payload };
 }
 
