@@ -118,6 +118,48 @@ pnpm lint        # Biome (lint + format check); pnpm lint:fix to write
 pnpm test        # Vitest unit tests
 ```
 
+Those three are not the whole gate. `next build` and `tsc` both pass on setups where
+`next dev` does not — Next drives its incremental compiler API only in dev — so a change
+to the toolchain is verified by **starting the dev server and requesting every page**
+(`/`, `/buyer`, `/merchant`), not by the three commands above.
+
+Two pins worth knowing before you bump anything:
+
+- **TypeScript stays on 6.x.** TS 7 is the native port and does not expose the JS
+  compiler API Next's type-check integration calls, so `next dev` exits with
+  *"TypeScript 7.x does not provide the compiler API required by Next.js"*. Next offers
+  an experimental CLI fallback; supporting a major the framework doesn't is not a trade
+  worth making here.
+- **Tailwind must be told where Streamdown's classes live.** `globals.css` carries
+  `@source "../../node_modules/streamdown/dist/*.js"` because Tailwind only scans this
+  project's own files — without it Streamdown's markdown (lists, tables, code blocks)
+  renders unstyled in the buyer chat, and nothing in the build reports it. `biome.json`
+  enables `css.parser.tailwindDirectives` so that `@source` is not a parse error.
+
+### After upgrading `eve`
+
+Upgrading eve invalidates any workflow run that was still in flight, and the dev server
+will say so loudly on the next boot:
+
+```
+[workflow-sdk] Workflow replay diverged … code REPLAY_DIVERGENCE
+[workflow-sdk] Error while running workflow … CorruptedEventLogError
+```
+
+Not a bug and nothing to debug: eve records step names qualified by its own version
+(`step//eve@0.29.2//createSessionStep`), so after an upgrade a replay produces a name
+the recorded event log does not contain. It exhausts its recovery replays and declares
+the log corrupted.
+
+The cure is to discard the stale dev workflow state:
+
+```bash
+rm -rf .eve/.workflow-data
+```
+
+`.eve/` is gitignored scratch, and this only drops eve's own session/turn bookkeeping —
+the order store lives in `.data/store.json` (or Redis) and is untouched.
+
 ## Deploying to Vercel
 
 1. Push the repo to GitHub and import it in Vercel (the SDK tarball in
