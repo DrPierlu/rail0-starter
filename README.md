@@ -105,6 +105,13 @@ a rail0 gateway to talk to, and an Anthropic API key.
    the same port it binds. Left to drift, the agent's shop calls landed on
    rail0-admin, which answers them.
 
+`next.config.ts` allows `127.0.0.1` as a dev origin. A browser treats it as a
+different origin from `localhost`, and Next blocks cross-origin requests to its dev
+resources with a **403** — not just a warning, so HMR stops working silently. The eve
+agent service listens on `127.0.0.1`, so that origin is normal here. Loopback only: a
+LAN address would let other machines reach the dev server, which is what the default
+protects against.
+
 ### Chatting from the terminal (optional)
 
 The browser at `/buyer` is the normal way in. To watch the same agent from a
