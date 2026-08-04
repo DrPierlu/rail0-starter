@@ -119,7 +119,8 @@ export function SigningCard({
           </button>
         ) : (
           <span className="text-xs text-amber-600 dark:text-amber-400">
-            Connect the buyer wallet at the top of the page first.
+            Connect the buyer wallet in the bar at the top of the page, then come back to this card
+            to sign.
           </span>
         )}
         {error && <span className="text-xs text-red-500">{error}</span>}

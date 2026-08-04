@@ -173,6 +173,43 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setWallet(null);
   }, [wallet]);
 
+  // Restore a MetaMask connection on mount.
+  //
+  // WalletProvider lives inside the buyer page, so hopping to /merchant and back — or
+  // reloading — unmounts it and this state dies with it. The chat survives that (it is
+  // parked in sessionStorage); the wallet did not, so every navigation looked like
+  // MetaMask had disconnected and the pending signing card had to be hunted down again
+  // in the transcript.
+  //
+  // eth_accounts, NOT eth_requestAccounts: it never prompts. It answers with the
+  // account the site is already permitted to see, or [] when it has none — so MetaMask
+  // is the source of truth and nothing has to be stored here. That matters, because the
+  // other backend is a pasted private key, and putting THAT anywhere persistent is the
+  // one thing this component must never do; it stays tab-lifetime only, by design.
+  //
+  // An explicit disconnect revokes the permission, so this cannot resurrect a wallet
+  // the user deliberately dropped: eth_accounts then returns [].
+  useEffect(() => {
+    const ethereum = window.ethereum;
+    if (!ethereum) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const accounts = (await ethereum.request({ method: "eth_accounts" })) as string[];
+        // Never clobber a wallet connected in the meantime — in particular a pasted
+        // key, which this must not silently replace with a MetaMask account.
+        if (!cancelled && accounts?.[0]) {
+          setWallet((current) => current ?? metaMaskWallet(accounts[0]));
+        }
+      } catch {
+        // No permission, or a provider without eth_accounts: stay disconnected.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [metaMaskWallet]);
+
   // Follow the wallet when the user switches account (or disconnects the site) from
   // inside MetaMask, instead of holding an address the extension no longer controls —
   // which would only surface as a confusing signature failure at checkout. An empty
