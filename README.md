@@ -93,9 +93,31 @@ a rail0 gateway to talk to, and an Anthropic API key.
    `pnpm install && pnpm dev` — one dev server runs Next and the agent
    service together.)
 
-   Open [http://localhost:3000](http://localhost:3000) and pick a side: ask the
-   agent to shop on [/buyer](http://localhost:3000/buyer), then capture the
-   order on [/merchant](http://localhost:3000/merchant).
+   Open [http://localhost:4000](http://localhost:4000) and pick a side: ask the
+   agent to shop on [/buyer](http://localhost:4000/buyer), then capture the
+   order on [/merchant](http://localhost:4000/merchant).
+
+   **Port 4000 is deliberate.** A full local rail0 stack already holds 3000
+   (rail0-admin) and 3001 (the indexer's API), so the app claims one of its own
+   instead of drifting to whatever is free. That matters more than tidiness: the
+   agent runs as a separate service with no request to derive the storefront
+   origin from, so it is told via `SHOP_URL` — and `bin/dev` derives that from
+   the same port it binds. Left to drift, the agent's shop calls landed on
+   rail0-admin, which answers them.
+
+### Chatting from the terminal (optional)
+
+The browser at `/buyer` is the normal way in. To watch the same agent from a
+terminal — tool calls, reasoning, subagents — attach to the running dev server:
+
+```bash
+pnpm agent http://127.0.0.1:<port>   # the port from bin/dev's "[eve:dev] server listening at …" line
+```
+
+`eve` is a project dev dependency, not a global CLI: run it through the package
+manager (`pnpm agent`, i.e. `eve dev`) from the repo. Installing it globally
+invites a version mismatch with the one the app runs, and eve keys its workflow
+step names by its own version — see [After upgrading `eve`](#after-upgrading-eve).
 
 ## What to change first
 

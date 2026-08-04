@@ -36,4 +36,22 @@ set -a
 source .env.local
 set +a
 
+# The agent runs as a SEPARATE service, so it cannot derive the storefront origin
+# from a request — it has to be told. Deriving SHOP_URL from the port we are about
+# to bind keeps the two from drifting: an unset SHOP_URL used to mean the agent
+# called localhost:3000, which in a full local rail0 stack is rail0-admin, so its
+# shop calls reached a different application that answers them.
+port=4000
+export SHOP_URL="${SHOP_URL:-http://localhost:$port}"
+
+# Next silently moves to the next free port when this one is taken, which would
+# leave SHOP_URL pointing at whoever holds it. Say so rather than let the agent
+# talk to a stranger.
+if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "warning: port $port is already in use — Next will pick another one,"
+  echo "         and SHOP_URL ($SHOP_URL) will point at whatever holds $port."
+  echo "         Free it, or run with SHOP_URL set to the port Next reports."
+fi
+
+echo "Storefront: $SHOP_URL  ·  buyer chat: $SHOP_URL/buyer"
 exec pnpm dev
