@@ -204,6 +204,32 @@ the order store lives in `.data/store.json` (or Redis) and is untouched.
 
 ## Deploying to Vercel
 
+```bash
+bin/deploy --check   # preflight only
+bin/deploy           # preflight, then `eve deploy`
+```
+
+The deploy itself is **`eve deploy`** — eve's own command. The agent and the Next app are
+one deployable (`withEve` mounts the agent on this app's origin), so there is no second
+service to ship, and `eve deploy` links the directory first when it needs to.
+
+`bin/deploy` adds the preflight: a clean tree (Vercel builds what you push), a vendored
+SDK tarball that is not older than `../rail0-ts/src` (it is the only source of
+`@rail0/sdk` and a tracked artifact, so a stale one ships silently), the three checks,
+and the environment the deployed app needs. It refuses rather than deploying when any of
+those fail. With the `vercel` CLI installed it reads the project's production
+environment; without it, it prints what must be there.
+
+Two things worth knowing before the first deploy:
+
+- **A Redis store is not optional.** Vercel's filesystem is read-only for the app, so the
+  file driver raises `EROFS` at `checkout_begin` and the buyer flow dies at step one.
+- **`eve link` pulls AI Gateway credentials that this agent does not use.** `agent.ts`
+  builds a direct provider model (`anthropic(...)`), so `ANTHROPIC_API_KEY` is what it
+  reads — linking can look like it has supplied model access when it has not.
+
+Manual equivalent, and what to set up once:
+
 1. Push the repo to GitHub and import it in Vercel (the SDK tarball in
    `vendor/` makes the install self-contained).
 2. Add a Redis store: the file store cannot work on Vercel's ephemeral
