@@ -39,7 +39,14 @@ interface PaymentMethod {
   symbol: string;
 }
 
-export function ToolView({ part }: { part: ToolPart }) {
+export function ToolView({
+  part,
+  activeOrderId,
+}: {
+  part: ToolPart;
+  /** The order the docked panel is live on — rendered here as a reference, not a card. */
+  activeOrderId?: string;
+}) {
   const name = part.type.replace(/^tool-/, "");
 
   // Rich views only make sense once the tool has produced output; while it
@@ -66,11 +73,21 @@ export function ToolView({ part }: { part: ToolPart }) {
     // exists (the flow split into begin/payment/submit), so the settle step
     // fell through to the generic JSON chip and the live OrderCard
     // (authorizing -> in_escrow polling) never appeared.
-    case "checkout_submit":
-      return <OrderCard orderId={output?.order_id as string} />;
+    // The transcript never holds a LIVE order any more: the docked panel is the single
+    // place an order's state updates. So the active order is a reference pointing there,
+    // and any other order is a snapshot of what the agent saw — which is what a
+    // transcript should be.
+    case "checkout_submit": {
+      const orderId = output?.order_id as string | undefined;
+      if (!orderId) return <ToolChip part={part} />;
+      if (orderId === activeOrderId) return <OrderReference orderId={orderId} />;
+      return <OrderCard orderId={orderId} live={false} />;
+    }
     case "order_status": {
       const order = output?.order as Order | undefined;
-      return order ? <OrderCard orderId={order.id} initial={order} /> : <ToolChip part={part} />;
+      if (!order) return <ToolChip part={part} />;
+      if (order.id === activeOrderId) return <OrderReference orderId={order.id} />;
+      return <OrderCard orderId={order.id} initial={order} live={false} />;
     }
     case "my_orders":
       return <OrderList orders={(output?.orders as Order[]) ?? []} />;
@@ -252,6 +269,34 @@ export function ToolChip({ part }: { part: ToolPart }) {
           )}
         </pre>
       )}
+    </div>
+  );
+}
+
+/**
+ * The order an OrderCard would be put on screen for by this tool output, if any.
+ *
+ * Exported so the transcript can tell that two parts render a card for the SAME order
+ * and keep one — the dedupe has to happen across messages, which no single part can
+ * see. Kept here, next to the switch that decides it, so the two cannot drift.
+ */
+export function orderCardOrderId(toolName: string, output: unknown): string | undefined {
+  const o = output as Record<string, unknown> | undefined;
+  if (toolName === "checkout_submit") {
+    return typeof o?.order_id === "string" ? o.order_id : undefined;
+  }
+  if (toolName === "order_status") {
+    const order = o?.order as { id?: unknown } | undefined;
+    return typeof order?.id === "string" ? order.id : undefined;
+  }
+  return undefined;
+}
+
+/** Points at the docked panel, which is where this order is live. */
+function OrderReference({ orderId }: { orderId: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-700">
+      ↓ order #{orderId} — live in the box above the message field
     </div>
   );
 }

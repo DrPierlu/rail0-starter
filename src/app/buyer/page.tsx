@@ -4,8 +4,11 @@ import type { MessageStreamEvent, SessionState } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
+import { type CheckoutEvent, pendingSignature } from "@/lib/checkout-step";
+import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
-import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
+import { asSigningOutput, signingKey } from "./signing-card";
+import { orderCardOrderId } from "./tool-views";
 import { useWallet, WalletChip, WalletProvider } from "./wallet";
 
 const SUGGESTIONS = [
@@ -69,7 +72,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   const [input, setInput] = useState("");
   const [saved] = useState<SavedChat>(loadSaved);
   const { wallet } = useWallet();
-  // Signing steps already signed in this tab. The pinned slot needs it to know when to
+  // Signing steps already signed in this tab. The docked box needs it to know when to
   // let go, and the transcript copies need it to render as done rather than offering a
   // second signature.
   const [signedKeys, setSignedKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
@@ -115,9 +118,23 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
 
+  // Re-arm the follow, because sending is the user saying "I am at the live end of this
+  // conversation" — the clearest signal there is.
+  //
+  // pinnedRef only ever LATCHED off: onScroll turned it false as soon as you scrolled up
+  // past the threshold, and nothing turned it back on. Correct while tokens stream (being
+  // yanked down mid-read is the thing that guard exists to prevent), wrong the moment you
+  // then type something: your own message landed below the fold and the whole reply
+  // streamed off-screen. Every caller here is user-initiated — the composer, retry, the
+  // signing cards' nudge, an approval — so all of them re-arm.
+  const followStream = () => {
+    pinnedRef.current = true;
+  };
+
   // Every turn carries the connected wallet address as ephemeral client
   // context: checkout_begin needs it, and the model must never guess it.
   const sendText = (text: string) => {
+    followStream();
     void agent.send({
       message: text,
       clientContext: wallet ? { buyer_wallet_address: wallet.address } : undefined,
@@ -132,6 +149,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   };
 
   const respond = (requestId: string, optionId: string) => {
+    followStream();
     void agent.send({ inputResponses: [{ requestId, optionId }] });
   };
 
@@ -155,40 +173,73 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     onNewConversation();
   };
 
-  // The signing step still waiting for a signature — the LAST one the agent produced
-  // that has not been signed. Pinned below the wallet bar so it cannot scroll out of
-  // reach: it is a chat message, and hunting back up the transcript to press Sign was
-  // the whole annoyance. Signing it (or a later step arriving) clears the pin.
-  const pending = useMemo(() => {
-    let last: { key: string; output: ReturnType<typeof asSigningOutput> } | null = null;
+  // ONE walk of the transcript, producing everything the docked panel and the transcript
+  // need. It was two walks that had to agree on what counts as "the current checkout";
+  // deriving them together is what keeps them from disagreeing.
+  //
+  //   pending — the signature still owed. The LAST signing step the agent produced that
+  //     has not been signed, and that the conversation has not already moved past.
+  //
+  //     `signedKeys` alone was not enough, and the failure was visible: it is component
+  //     state, while the transcript is restored from sessionStorage, so after a reload
+  //     every already-signed step looked unsigned again — the box offered to sign a
+  //     payment the transcript itself showed as submitted and confirming. So the
+  //     transcript is the authority: an order-card output for the SAME order appearing
+  //     AFTER the signing step means the flow moved on, and the signature is done.
+  //     signedKeys still matters for the moment between signing and the agent's next
+  //     tool call, when the transcript has no such proof yet.
+  //
+  //   superseded — repeat OrderCards for the same order, by toolCallId. The agent calls
+  //     order_status again and again while a payment confirms, and each output rendered
+  //     its own card. Keyed on toolCallId, which dynamic-tool parts DO carry — the
+  //     "parts have no stable id" note on the render loop below is about text parts.
+  //
+  //   lastOrderId — the checkout the panel is about, when no signature is owed.
+  const { pending, superseded, lastOrderId } = useMemo(() => {
+    const events: CheckoutEvent[] = [];
+    const outputByKey = new Map<string, ReturnType<typeof asSigningOutput>>();
+    const seen = new Map<string, string>();
+    const superseded = new Set<string>();
+    let lastOrderId: string | undefined;
+
     for (const message of agent.data.messages) {
       for (const part of message.parts) {
         if (part.type !== "dynamic-tool" || part.state !== "output-available") continue;
+
         const signing = asSigningOutput(part.output);
-        if (!signing) continue;
-        const key = signingKey(signing);
-        last = signedKeys.has(key) ? null : { key, output: signing };
+        if (signing) {
+          const key = signingKey(signing);
+          outputByKey.set(key, signing);
+          events.push({ kind: "signing", key, orderId: signing.order_id });
+          continue;
+        }
+
+        const orderId = orderCardOrderId(part.toolName, part.output);
+        if (!orderId) continue;
+        lastOrderId = orderId;
+        if (seen.has(orderId)) superseded.add(part.toolCallId);
+        else seen.set(orderId, part.toolCallId);
+        events.push({ kind: "order", orderId });
       }
     }
-    return last;
+
+    // The decision itself is pendingSignature (lib/checkout-step), not a copy of it here:
+    // the precedence it encodes is what got this wrong once already, and a duplicate would
+    // be the version no test covers.
+    const owed = pendingSignature(events, signedKeys);
+    const pending = owed ? { key: owed.key, output: outputByKey.get(owed.key) } : null;
+    return { pending, superseded, lastOrderId };
   }, [agent.data.messages, signedKeys]);
+
+  // A signature owed names its own order; otherwise it is the last one mentioned. This
+  // is the order the panel goes live on, and the one the transcript stops duplicating.
+  const activeOrderId = pending?.output?.order_id ?? lastOrderId;
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
       <div className="flex justify-end border-b border-neutral-200 py-2 dark:border-neutral-800">
         <WalletChip />
       </div>
-      {pending?.output && (
-        <div className="border-b border-neutral-200 py-2 dark:border-neutral-800">
-          <SigningCard
-            output={pending.output}
-            onContinue={sendText}
-            busy={busy}
-            pinned
-            onSigned={onSigned}
-          />
-        </div>
-      )}
       <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
         {agent.data.messages.length === 0 && (
           <div className="pt-16 text-center">
@@ -249,6 +300,8 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
                       pinnedKey={pending?.key ?? null}
                       signedKeys={signedKeys}
                       onSigned={onSigned}
+                      supersededCard={superseded.has(part.toolCallId)}
+                      activeOrderId={activeOrderId}
                     />
                   );
                 }
@@ -284,6 +337,20 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
           </button>
         </div>
       )}
+      {/* Everything actionable or live lives here, docked to the composer.
+          It used to sit at the TOP, which is what made the flow feel like it jumped:
+          you read the newest message at the bottom, then the thing to act on was at the
+          other end of the screen, then the reply came back at the bottom again. And it
+          was not even the only live surface — the order status polled away in a card a
+          few messages up. One box, one position, one thing at a time. */}
+      <CheckoutPanel
+        signing={pending?.output ?? undefined}
+        orderId={activeOrderId}
+        onContinue={sendText}
+        busy={busy}
+        signed={pending ? signedKeys.has(pending.key) : undefined}
+        onSigned={onSigned}
+      />
       <form
         onSubmit={(e) => {
           e.preventDefault();

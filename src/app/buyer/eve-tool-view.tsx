@@ -2,7 +2,7 @@
 
 import type { EveDynamicToolPart } from "eve/react";
 import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
-import { type ToolPart, ToolView } from "./tool-views";
+import { orderCardOrderId, type ToolPart, ToolView } from "./tool-views";
 
 // Bridge between eve's `dynamic-tool` parts and the rich tool views built for
 // the AI SDK variant. The lifecycle states line up one-to-one, so everything
@@ -19,6 +19,8 @@ export function EveToolView({
   pinnedKey = null,
   signedKeys,
   onSigned,
+  supersededCard = false,
+  activeOrderId,
 }: {
   part: EveDynamicToolPart;
   /** Answer a pending HITL request (approve/deny). */
@@ -31,7 +33,27 @@ export function EveToolView({
   /** Signing steps already signed, so a transcript copy renders as done. */
   signedKeys?: ReadonlySet<string>;
   onSigned?: (key: string) => void;
+  /** An OrderCard for an order already shown earlier in the transcript. */
+  supersededCard?: boolean;
+  /** The order the docked panel is live on. */
+  activeOrderId?: string;
 }) {
+  // A repeat status check for an order already shown. Only for an order OTHER than the
+  // active one, which ToolView renders as a reference to the panel instead — this used
+  // to say "the card above is live", pointing at a card that no longer exists now that
+  // the panel below is the only live surface.
+  if (
+    part.state === "output-available" &&
+    supersededCard &&
+    orderCardOrderId(part.toolName, part.output) !== activeOrderId
+  ) {
+    return (
+      <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-700">
+        status checked
+      </div>
+    );
+  }
+
   if (part.state === "output-available") {
     const signing = asSigningOutput(part.output);
     if (signing) {
@@ -43,8 +65,8 @@ export function EveToolView({
       if (key === pinnedKey) {
         return (
           <div className="rounded-lg border border-dashed border-blue-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-blue-900">
-            ↑ {signing.step === "sign_login" ? "Sign in as the buyer" : "Sign the payment"} —
-            waiting for your signature, pinned at the top
+            ↓ {signing.step === "sign_login" ? "Sign in as the buyer" : "Sign the payment"} —
+            waiting for your signature, in the box above the message field
           </div>
         );
       }
@@ -120,5 +142,5 @@ export function EveToolView({
     output: part.state === "output-available" ? part.output : undefined,
     errorText: part.state === "output-error" ? part.errorText : undefined,
   };
-  return <ToolView part={mapped} />;
+  return <ToolView part={mapped} activeOrderId={activeOrderId} />;
 }
