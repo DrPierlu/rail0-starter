@@ -70,7 +70,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   const [input, setInput] = useState("");
   const [saved] = useState<SavedChat>(loadSaved);
   const { wallet } = useWallet();
-  // Signing steps already signed in this tab. The pinned slot needs it to know when to
+  // Signing steps already signed in this tab. The docked box needs it to know when to
   // let go, and the transcript copies need it to render as done rather than offering a
   // second signature.
   const [signedKeys, setSignedKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
@@ -172,9 +172,12 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   };
 
   // The signing step still waiting for a signature — the LAST one the agent produced
-  // that has not been signed. Pinned below the wallet bar so it cannot scroll out of
-  // reach: it is a chat message, and hunting back up the transcript to press Sign was
-  // the whole annoyance. Signing it (or a later step arriving) clears the pin.
+  // that has not been signed. Held in the docked box above the composer so it cannot
+  // scroll out of reach: it is a chat message, and hunting back up the transcript to
+  // press Sign was the original annoyance. It sat at the TOP first, which traded that
+  // annoyance for a worse one — the flow jumped between the bottom, where you read and
+  // type, and the top, where you had to act. Signing it (or a later step arriving)
+  // empties the box.
   const pending = useMemo(() => {
     let last: { key: string; output: ReturnType<typeof asSigningOutput> } | null = null;
     for (const message of agent.data.messages) {
@@ -221,16 +224,6 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
       <div className="flex justify-end border-b border-neutral-200 py-2 dark:border-neutral-800">
         <WalletChip />
       </div>
-      {pending?.output && (
-        <div className="border-b border-neutral-200 py-2 dark:border-neutral-800">
-          <SigningCard
-            output={pending.output}
-            onContinue={sendText}
-            busy={busy}
-            onSigned={onSigned}
-          />
-        </div>
-      )}
       <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
         {agent.data.messages.length === 0 && (
           <div className="pt-16 text-center">
@@ -325,6 +318,22 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
           >
             New conversation
           </button>
+        </div>
+      )}
+      {/* The active step, docked to the composer.
+          It used to sit at the TOP, under the wallet bar, which is what made the flow
+          feel like it jumped: you read the newest message at the bottom, then the thing
+          to act on was at the other end of the screen, then the reply came back at the
+          bottom again. Here it is where attention already is — next to where you type
+          and where new messages arrive — so control never moves. */}
+      {pending?.output && (
+        <div className="border-t border-neutral-200 pt-2 dark:border-neutral-800">
+          <SigningCard
+            output={pending.output}
+            onContinue={sendText}
+            busy={busy}
+            onSigned={onSigned}
+          />
         </div>
       )}
       <form

@@ -57,8 +57,8 @@ export function EveToolView({
       if (key === pinnedKey) {
         return (
           <div className="rounded-lg border border-dashed border-blue-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-blue-900">
-            ↑ {signing.step === "sign_login" ? "Sign in as the buyer" : "Sign the payment"} —
-            waiting for your signature, pinned at the top
+            ↓ {signing.step === "sign_login" ? "Sign in as the buyer" : "Sign the payment"} —
+            waiting for your signature, in the box above the message field
           </div>
         );
       }
