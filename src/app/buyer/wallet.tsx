@@ -103,6 +103,49 @@ function pack(sig: Eip3009Signature): string {
   return `${sig.r}${sig.s.slice(2)}${sig.v.toString(16).padStart(2, "0")}`;
 }
 
+/**
+ * Put MetaMask on `wanted` before asking it to sign typed data.
+ *
+ * `eth_signTypedData_v4` REFUSES a payload whose domain names a different chain than
+ * the wallet is on — "Provided chainId 5042002 must match the active chainId 80002".
+ * Nothing asked MetaMask to switch, so a buyer whose wallet happened to sit on
+ * another network simply could not pay, and the only clue was that raw message.
+ *
+ * The chain to switch to is read from the payload the gateway built, so this needs no
+ * plumbing through the UI and covers every typed-data signature rather than one card.
+ *
+ * A chain MetaMask does not know answers 4902, and we cannot add it for them:
+ * wallet_addEthereumChain needs rpcUrls, and the gateway exposes those only on the
+ * HMAC-protected /sync/blockchains — the public GET /chains carries name, symbol and
+ * explorer, not endpoints. So that case becomes an instruction instead of a silent
+ * failure. Every other rejection (4001 above all) is left to the caller, which runs it
+ * through walletErrorMessage.
+ */
+export async function ensureChain(
+  ethereum: EthereumProvider,
+  wanted: number | undefined,
+): Promise<void> {
+  if (!wanted) return;
+
+  const active = Number.parseInt((await ethereum.request({ method: "eth_chainId" })) as string, 16);
+  if (active === wanted) return;
+
+  try {
+    await ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: `0x${wanted.toString(16)}` }],
+    });
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 4902) {
+      throw new Error(
+        `MetaMask has no network for chain ${wanted}. Add it in MetaMask (Settings → Networks), ` +
+          "then sign again.",
+      );
+    }
+    throw err;
+  }
+}
+
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   // Detected after mount, not during render: `typeof window !== "undefined"` is false
@@ -131,6 +174,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       signTypedData: async (payload) => {
         const ethereum = window.ethereum;
         if (!ethereum) throw new Error("MetaMask is not available");
+        // Before the prompt, not after the refusal: the domain's chain has to be the
+        // active one or eth_signTypedData_v4 rejects outright.
+        await ensureChain(ethereum, payload.domain?.chainId);
         return (await ethereum.request({
           method: "eth_signTypedData_v4",
           params: [address, JSON.stringify(payload)],
