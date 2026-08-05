@@ -46,4 +46,30 @@ export default defineTool({
       deposit_nonce,
     };
   },
+  // What the MODEL sees. The card still gets the full return — toModelOutput "only
+  // affects the model. Channel event handlers and hooks still get the full output on
+  // action.result" (docs/tools/overview.mdx).
+  //
+  // So the deposit nonce and the SIWE text never enter model context or the durable model
+  // history. The nonce is a capability: it is what lets a signature be deposited for this
+  // checkout, and it was previously kept out of replies by a prompt rule ("never repeat
+  // it") — the model being asked not to say a secret it was handed. The docs name this
+  // exact case: "Do not return secrets, credentials, unnecessary personal data, or
+  // unbounded sensitive content from tools. Filter, minimize, and redact tool outputs
+  // before returning them."
+  //
+  // The model only needs to know which step it is on and what to tell the user.
+  toModelOutput(output) {
+    if ("error" in output) return { type: "json", value: { error: output.error } };
+    return {
+      type: "json",
+      value: {
+        step: output.step,
+        order_id: output.order_id,
+        total: output.total,
+        token: output.token,
+        awaiting: "the user signs the sign-in card shown in chat",
+      },
+    };
+  },
 });

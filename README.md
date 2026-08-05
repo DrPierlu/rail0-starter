@@ -213,6 +213,14 @@ the order store lives in `.data/store.json` (or Redis) and is untouched.
 
 ## Deploying to Vercel
 
+> **Who may talk to the agent is `agent/channels/eve.ts`.** It is set to `none()` —
+> anonymous — because this is a public demo: there is no account to authenticate, the
+> buyer's key never leaves their browser, and the merchant side is gated separately by
+> `MERCHANT_TOKEN`. **Change that line before the app has real users**, or every session
+> is anonymous and shared. Without the file at all eve is fail-closed and the deployed
+> chat answers `401` to every visitor, which is why it exists.
+
+
 ```bash
 bin/deploy --check   # preflight only
 bin/deploy           # preflight, then `eve deploy`

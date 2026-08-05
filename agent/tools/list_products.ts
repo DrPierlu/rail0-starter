@@ -12,7 +12,10 @@ export default defineTool({
     category: z
       .string()
       .optional()
-      .describe("Exact category, e.g. 'T-Shirts'. Call list_categories if unsure."),
+      .describe(
+        "Exact category, e.g. 'T-Shirts'. Omit both fields to list everything — the " +
+          "result carries the full set of categories.",
+      ),
     search: z
       .string()
       .optional()
