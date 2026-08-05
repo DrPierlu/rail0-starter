@@ -432,7 +432,7 @@ packages:
     resolution: {integrity: sha512-7W+2q5AKQVU36fkaryontrHn3YDt1RyUYXatw9i5H8ocYe2sPKSFB6eS8WNPeRKiN1qAWWZUPm7gwFzJGrccqQ==}
 
   '@rail0/sdk@file:vendor/rail0-sdk-1.0.0.tgz':
-    resolution: {integrity: sha512-ZBl5M2PiXtAkB0iRmPh1UPzUcct6QObyQD+sQy+/47pS/bkD5cN4YwOHeOoqwiFHdb0vkauwTJpBgpZ+ztIuUw==, tarball: file:vendor/rail0-sdk-1.0.0.tgz}
+    resolution: {integrity: sha512-eK1K4KeKd0tIV6tr6ThMMMQ0w89HGPj55JFcJ7RntaQFfy40WiUhlsLKKo8bjVwuVylu/bWq7pO0xT82ZQ25uA==, tarball: file:vendor/rail0-sdk-1.0.0.tgz}
     version: 1.0.0
     engines: {node: '>=22', pnpm: '>=9'}
 
