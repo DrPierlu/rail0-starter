@@ -82,6 +82,14 @@ export default function Merchant() {
       const body = await res.json();
       if (!res.ok) setError(body.error ?? `${action} failed`);
       await refresh();
+    } catch {
+      // The fetch itself failing (the server down mid-action, a non-JSON body) had
+      // no handler: the promise onClick returned rejected unhandled, so nothing was
+      // shown and the button simply snapped back as if the click had never happened
+      // — on capture and void, the two things that move real escrowed funds. Same
+      // message shape as refresh()/signIn(). The refresh above is skipped on this
+      // path, which is what keeps the message on screen.
+      setError(`${action} failed — the storefront could not be reached`);
     } finally {
       setActing(null);
     }
