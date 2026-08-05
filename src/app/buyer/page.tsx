@@ -184,7 +184,6 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
             output={pending.output}
             onContinue={sendText}
             busy={busy}
-            pinned
             onSigned={onSigned}
           />
         </div>

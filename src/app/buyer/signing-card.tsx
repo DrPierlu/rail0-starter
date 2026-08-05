@@ -2,7 +2,7 @@
 
 import type { SigningPayload } from "@rail0/sdk";
 import { useState } from "react";
-import { useWallet } from "./wallet";
+import { useWallet, WalletConnect, walletErrorMessage } from "./wallet";
 
 // The two signature hand-off cards of the keyless checkout. Each signs with
 // the browser wallet, POSTs the signature to the storefront stash (never
@@ -53,7 +53,6 @@ export function SigningCard({
   onContinue,
   busy,
   signed = false,
-  pinned = false,
   onSigned,
 }: {
   output: SigningOutput;
@@ -67,8 +66,6 @@ export function SigningCard({
    * sign an already-signed step.
    */
   signed?: boolean;
-  /** Rendered in the pinned slot: drop the "come back to this card" instruction. */
-  pinned?: boolean;
   /** Reports the signature so the page can stop pinning this step. */
   onSigned?: (key: string) => void;
 }) {
@@ -114,7 +111,9 @@ export function SigningCard({
       );
     } catch (err) {
       setState("error");
-      setError(err instanceof Error ? err.message : String(err));
+      // A MetaMask rejection is a plain {code, message} object, not an Error, so
+      // String(err) rendered "[object Object]" right next to the sign button.
+      setError(walletErrorMessage(err));
     }
   };
 
@@ -162,11 +161,15 @@ export function SigningCard({
                 : "Sign with the pasted key"}
           </button>
         ) : (
-          <span className="text-xs text-amber-600 dark:text-amber-400">
-            {pinned
-              ? "Connect the buyer wallet just above to sign."
-              : "Connect the buyer wallet in the bar at the top of the page, then come back to this card to sign."}
-          </span>
+          // The connect controls are HERE, not in a strip at the top of the page: this
+          // card is the moment the wallet is needed, and sending the user off to find
+          // a control elsewhere on screen is what made the old version unclear.
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-neutral-500">
+              Connect the buyer wallet to sign — no funds move until you approve.
+            </span>
+            <WalletConnect />
+          </div>
         )}
         {error && <span className="text-xs text-red-500">{error}</span>}
       </div>

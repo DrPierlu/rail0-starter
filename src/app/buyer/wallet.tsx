@@ -55,6 +55,36 @@ export function useWallet(): WalletContextValue {
   return ctx;
 }
 
+/**
+ * Readable text for a failure that came out of the wallet.
+ *
+ * `err instanceof Error ? err.message : String(err)` is wrong for a provider: an
+ * EIP-1193 rejection is a ProviderRpcError, and MetaMask's injected proxy delivers it
+ * as a PLAIN OBJECT `{code, message}` rather than an Error instance. So the usual
+ * ternary fell through to `String(err)` and the user was shown the literal text
+ * `[object Object]` — most visibly next to "Sign with MetaMask", where declining the
+ * prompt is the single most common thing that happens.
+ *
+ * The two codes worth their own wording are the ones a user actually hits; anything
+ * else keeps the provider's own message, which is more specific than we could be.
+ */
+export function walletErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string" && err) return err;
+
+  if (typeof err === "object" && err !== null) {
+    const { code, message } = err as { code?: unknown; message?: unknown };
+    // 4001 is the user closing the prompt — not an error worth alarming language.
+    if (code === 4001) return "you declined the request in the wallet";
+    // -32002: a prompt is already open, usually behind the browser window.
+    if (code === -32002) return "the wallet already has a request open — check MetaMask";
+    if (typeof message === "string" && message) return message;
+    if (typeof code === "number") return `the wallet refused the request (code ${code})`;
+  }
+
+  return "the wallet request failed";
+}
+
 /** EIP-55 checksum of a plain address (MetaMask hands addresses back lowercase). */
 export function toChecksumAddress(address: string): string {
   const addr = address.toLowerCase().replace(/^0x/, "");
@@ -239,12 +269,104 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
-/** Header chip: connect MetaMask or paste a key; shows the connected address. */
-export function WalletChip() {
-  const { wallet, hasMetaMask, connectMetaMask, switchMetaMask, connectPrivateKey, disconnect } =
-    useWallet();
+/**
+ * The connect controls — MetaMask, or paste a key.
+ *
+ * Its own component so it can be rendered WHERE THE WALLET IS NEEDED. It used to live
+ * only in the page header, and the signing card could do no better than tell you to
+ * go and find it ("connect the buyer wallet in the bar at the top of the page, then
+ * come back to this card"): the one moment the wallet matters, the control for it was
+ * somewhere else on screen, in a strip that looked like chrome rather than a step.
+ * Now the signing card renders this inline, in the flow of the conversation, at the
+ * point it is blocking on.
+ */
+export function WalletConnect({ className = "" }: { className?: string }) {
+  const { hasMetaMask, connectMetaMask, connectPrivateKey } = useWallet();
   const [pasting, setPasting] = useState(false);
   const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className={`flex flex-wrap items-center gap-2 text-xs ${className}`}>
+      {pasting ? (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            try {
+              connectPrivateKey(key);
+              setKey("");
+              setPasting(false);
+              setError(null);
+            } catch (err) {
+              setError(walletErrorMessage(err));
+            }
+          }}
+        >
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="0x… private key (stays in this tab)"
+            className="w-64 rounded-lg border border-neutral-300 bg-transparent px-2 py-1 font-mono outline-none focus:border-neutral-500 dark:border-neutral-700"
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white dark:bg-neutral-100 dark:text-black"
+          >
+            Use key
+          </button>
+          <button
+            type="button"
+            onClick={() => setPasting(false)}
+            className="text-neutral-400 hover:underline"
+          >
+            cancel
+          </button>
+        </form>
+      ) : (
+        <>
+          {hasMetaMask && (
+            <button
+              type="button"
+              onClick={() => {
+                setBusy(true);
+                setError(null);
+                connectMetaMask()
+                  .catch((e: unknown) => setError(walletErrorMessage(e)))
+                  .finally(() => setBusy(false));
+              }}
+              disabled={busy}
+              className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-black"
+            >
+              {busy ? "Waiting for MetaMask…" : "Connect MetaMask"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setPasting(true)}
+            className="rounded-lg border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Paste a key
+          </button>
+        </>
+      )}
+      {error && <span className="text-red-500">{error}</span>}
+    </div>
+  );
+}
+
+/**
+ * Header status for a CONNECTED wallet: the address, plus switch and disconnect.
+ *
+ * Deliberately renders nothing when no wallet is connected. The connect prompt is not
+ * chrome — it belongs inline at the step that needs it (see WalletConnect), and a
+ * permanent strip at the top of the page asking to connect read as decoration and was
+ * routinely missed.
+ */
+export function WalletChip() {
+  const { wallet, switchMetaMask, disconnect } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -255,7 +377,7 @@ export function WalletChip() {
     setBusy(true);
     setError(null);
     action()
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setError(walletErrorMessage(e)))
       .finally(() => setBusy(false));
   };
 
@@ -295,67 +417,8 @@ export function WalletChip() {
     );
   }
 
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-      {error && <span className="text-red-500">{error}</span>}
-      {pasting ? (
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            try {
-              connectPrivateKey(key);
-              setKey("");
-              setPasting(false);
-              setError(null);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : String(err));
-            }
-          }}
-        >
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="0x… private key (stays in this tab)"
-            className="w-64 rounded-lg border border-neutral-300 bg-transparent px-2 py-1 font-mono outline-none focus:border-neutral-500 dark:border-neutral-700"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white dark:bg-neutral-100 dark:text-black"
-          >
-            Use key
-          </button>
-          <button
-            type="button"
-            onClick={() => setPasting(false)}
-            className="text-neutral-400 hover:underline"
-          >
-            cancel
-          </button>
-        </form>
-      ) : (
-        <>
-          <span className="text-neutral-400">buyer wallet:</span>
-          {hasMetaMask && (
-            <button
-              type="button"
-              onClick={run(connectMetaMask)}
-              disabled={busy}
-              className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white dark:bg-neutral-100 dark:text-black"
-            >
-              Connect MetaMask
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setPasting(true)}
-            className="rounded-lg border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Paste a key
-          </button>
-        </>
-      )}
-    </div>
-  );
+  // No wallet: render nothing. The connect prompt lives inline at the step that
+  // needs it (WalletConnect, used by the signing card) rather than as a permanent
+  // strip at the top of the page.
+  return null;
 }
