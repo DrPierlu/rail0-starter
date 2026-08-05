@@ -20,4 +20,19 @@ export default defineTool({
     // EIP-3009 signature and needs it too.
     return { step: "sign_payment", order_id, rail0_id, signing_payload, deposit_nonce };
   },
+  // The card gets the full return; the model gets none of the material it could leak or
+  // mangle. The EIP-712 payload must be signed VERBATIM, so routing it through model
+  // context is both a disclosure risk and a corruption risk — a single altered hex digit
+  // burns the payment. See checkout_begin for the full reasoning.
+  toModelOutput(output) {
+    return {
+      type: "json",
+      value: {
+        step: output.step,
+        order_id: output.order_id,
+        rail0_id: output.rail0_id,
+        awaiting: "the user signs the payment card shown in chat",
+      },
+    };
+  },
 });

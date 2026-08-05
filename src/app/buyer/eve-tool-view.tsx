@@ -1,6 +1,8 @@
 "use client";
 
+import type { EveMessageInputRequest } from "eve/client";
 import type { EveDynamicToolPart } from "eve/react";
+import { useState } from "react";
 import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
 import { orderCardOrderId, type ToolPart, ToolView } from "./tool-views";
 
@@ -24,7 +26,7 @@ export function EveToolView({
 }: {
   part: EveDynamicToolPart;
   /** Answer a pending HITL request (approve/deny). */
-  onRespond: (requestId: string, optionId: string) => void;
+  onRespond: (requestId: string, answer: { optionId?: string; text?: string }) => void;
   /** Send a chat message (the signing cards nudge the agent onward with it). */
   onContinue: (text: string) => void;
   busy: boolean;
@@ -84,36 +86,22 @@ export function EveToolView({
 
   if (part.state === "approval-requested") {
     const request = part.toolMetadata?.eve?.inputRequest;
+    // No request metadata means there is nothing to answer — say so rather than render a
+    // pair of buttons that resolve nothing.
+    if (!request) {
+      return (
+        <div className="rounded-lg border border-amber-300 px-3 py-2 text-xs dark:border-amber-900">
+          {part.toolName} — waiting for input, but the request details did not arrive.
+        </div>
+      );
+    }
     return (
-      <div className="rounded-lg border border-amber-300 px-3 py-2 dark:border-amber-900">
-        <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-400">
-          <span className="size-2 animate-pulse rounded-full bg-amber-500" />
-          {part.toolName}
-        </div>
-        <p className="mt-1 text-xs">{request?.prompt ?? `Approve running ${part.toolName}?`}</p>
-        <div className="mt-2 flex gap-2">
-          {(
-            request?.options ?? [
-              { id: "approve", label: "Approve" },
-              { id: "deny", label: "Deny" },
-            ]
-          ).map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              disabled={busy || !request}
-              onClick={() => request && onRespond(request.requestId, option.id)}
-              className={
-                option.style === "danger" || option.id === "deny"
-                  ? "rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                  : "rounded-lg bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
-              }
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <InputRequestCard
+        request={request}
+        toolName={part.toolName}
+        busy={busy}
+        onRespond={onRespond}
+      />
     );
   }
 
@@ -143,4 +131,123 @@ export function EveToolView({
     errorText: part.state === "output-error" ? part.errorText : undefined,
   };
   return <ToolView part={mapped} activeOrderId={activeOrderId} />;
+}
+
+/**
+ * A pending `input.requested`, rendered by what it IS rather than by which state it
+ * arrives in.
+ *
+ * Every request — a tool approval, an `ask_question`, a session-limit continuation —
+ * projects to the same `approval-requested` part, and this used to render all three as one
+ * amber "Approve running <tool>?" box with Approve/Deny. So the moment the agent asked a
+ * clarifying question ("which size?"), the shopper was shown an approval prompt for
+ * `ask_question` and had no way to type an answer.
+ *
+ * The docs say to route on the discriminator: "Each request includes a `kind`
+ * discriminator: `tool-approval`, `question`, or `session-limit`. Clients should use `kind`
+ * to choose behavior and presentation; `toolName` and `requestId` identify the action and
+ * request but do not encode its semantics" (docs/tools/human-in-the-loop.md).
+ *
+ * `display` picks the control and `allowFreeform` decides whether typing is allowed
+ * alongside the options, so a question with no options still gets a text field instead of
+ * a dead end.
+ */
+function InputRequestCard({
+  request,
+  toolName,
+  busy,
+  onRespond,
+}: {
+  request: EveMessageInputRequest;
+  toolName: string;
+  busy: boolean;
+  onRespond: (requestId: string, answer: { optionId?: string; text?: string }) => void;
+}) {
+  const [text, setText] = useState("");
+  const isQuestion = request.kind === "question";
+  const isLimit = request.kind === "session-limit";
+
+  // A question is the agent talking, not a risk to sign off — only the two that gate
+  // something get the amber treatment.
+  const frame = isQuestion
+    ? "rounded-lg border border-blue-300 px-3 py-2 dark:border-blue-900"
+    : "rounded-lg border border-amber-300 px-3 py-2 dark:border-amber-900";
+  const label = isQuestion ? "the agent is asking" : isLimit ? "session limit" : toolName;
+
+  // Only an approval has a safe default pair to fall back on. Inventing Approve/Deny for a
+  // question is what produced the original confusion, so a question with no options relies
+  // on the text field below.
+  const options =
+    request.options ??
+    (request.kind === "tool-approval"
+      ? [
+          { id: "approve", label: "Approve" },
+          { id: "deny", label: "Deny" },
+        ]
+      : []);
+  const canType = request.display === "text" || request.allowFreeform === true;
+
+  return (
+    <div className={frame}>
+      <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-400">
+        <span
+          className={
+            isQuestion
+              ? "size-2 animate-pulse rounded-full bg-blue-500"
+              : "size-2 animate-pulse rounded-full bg-amber-500"
+          }
+        />
+        {label}
+      </div>
+      <p className="mt-1 text-xs">{request.prompt}</p>
+
+      {options.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              disabled={busy}
+              title={option.description}
+              onClick={() => onRespond(request.requestId, { optionId: option.id })}
+              className={
+                option.style === "danger" || option.id === "deny"
+                  ? "rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  : "rounded-lg bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {canType && (
+        <form
+          className="mt-2 flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const answer = text.trim();
+            if (!answer) return;
+            setText("");
+            onRespond(request.requestId, { text: answer });
+          }}
+        >
+          <input
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="Type your answer…"
+            className="flex-1 rounded-lg border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none focus:border-neutral-500 dark:border-neutral-700"
+          />
+          <button
+            type="submit"
+            disabled={busy || text.trim().length === 0}
+            className="rounded-lg bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
+          >
+            Answer
+          </button>
+        </form>
+      )}
+    </div>
+  );
 }

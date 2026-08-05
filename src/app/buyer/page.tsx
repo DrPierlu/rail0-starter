@@ -148,9 +148,11 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     setInput("");
   };
 
-  const respond = (requestId: string, optionId: string) => {
+  // An answer is either a chosen option or typed text — InputResponse carries both as
+  // optional, and a question with allowFreeform (or display: "text") has no option to pick.
+  const respond = (requestId: string, answer: { optionId?: string; text?: string }) => {
     followStream();
-    void agent.send({ inputResponses: [{ requestId, optionId }] });
+    void agent.send({ inputResponses: [{ requestId, ...answer }] });
   };
 
   // Re-send the text of the last user message after a failed turn.
@@ -164,6 +166,21 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     // Order matters: refuse further writes, stop the stream, clear the parked
     // transcript, then remount — so nothing can re-save it on the way out.
     discardedRef.current = true;
+    // stop() is LOCAL. "Detaching the stream never cancels the work — the turn keeps
+    // running and billing on the server" (docs/guides/frontend/overview.mdx), so
+    // abandoning a conversation mid-turn left it running to completion for nobody. Cancel
+    // the turn on the server first.
+    //
+    // Fire and forget by design: the route answers "no_active_turn" for an unknown
+    // session, a settled turn, or a duplicate cancel, and the docs call that a success —
+    // "so a stop button can fire and forget". Nothing here should block on it, and a
+    // failure must not stop the user leaving the conversation.
+    const sessionId = agent.session?.sessionId;
+    if (sessionId) {
+      void fetch(`/eve/v1/session/${sessionId}/cancel`, { method: "POST" }).catch(() => {
+        // the conversation is being abandoned either way
+      });
+    }
     agent.stop();
     try {
       sessionStorage.removeItem(TRANSCRIPT_KEY);
