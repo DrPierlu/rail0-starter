@@ -26,6 +26,11 @@ export function OrderCard({ orderId, initial }: { orderId: string; initial?: Ord
       try {
         const res = await fetch(`/api/shop/orders/${orderId}`);
         if (cancelled) return;
+        // The only terminal answer, and it now means one thing: the merchant's
+        // store has no such order. A gateway read that failed used to arrive here
+        // as a 404 too, which latched this card on "order not found" — and stopped
+        // the poll for good — while the order was in the store all along. The route
+        // answers the stored snapshot (flagged stale) for that case instead.
         if (res.status === 404) {
           setGone(true);
           return;

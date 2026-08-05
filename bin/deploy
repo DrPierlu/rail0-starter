@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Deploy the starter — Next app plus the eve agent — to Vercel production.
+#
+#   bin/deploy            # preflight, then `eve deploy`
+#   bin/deploy --check    # preflight only, deploy nothing
+#
+# The deploy itself is `eve deploy`, eve's own command: the agent and the Next app are
+# ONE deployable (withEve mounts the agent on this app's origin), so there is no second
+# service to ship and nothing here reimplements `vercel deploy`. What this script adds is
+# the preflight — the checks whose absence turns into a green deploy that fails at
+# runtime, which is the expensive kind.
+#
+# Output stays ASCII-only: fancy glyphs next to a $variable can break shell parsing under
+# non-UTF-8 locales.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+check_only=false
+[[ "${1:-}" == "--check" ]] && check_only=true
+
+fail=0
+problem() { echo "ERROR: $*" >&2; fail=1; }
+note() { echo "note: $*"; }
+
+command -v pnpm >/dev/null 2>&1 || { echo "ERROR: pnpm not found" >&2; exit 1; }
+
+# ── 1. The tree you are shipping ──────────────────────────────────────────────
+# Vercel builds from what you push, so uncommitted work either does not ship or
+# ships from a state no commit records. Either way you cannot tell later what is live.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  problem "uncommitted changes — commit or stash them, or you cannot tell what is live"
+fi
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+[[ "$branch" == "main" ]] || note "deploying from '$branch', not main"
+
+# ── 2. The vendored SDK ───────────────────────────────────────────────────────
+# @rail0/sdk is not published: vendor/*.tgz is the only source of it, and it is a
+# TRACKED artifact, so a stale one deploys silently with old SDK behaviour.
+tarball=$(node -p "require('./package.json').dependencies['@rail0/sdk'].replace(/^file:/,'')" 2>/dev/null || true)
+if [[ -z "$tarball" || ! -f "$tarball" ]]; then
+  problem "the @rail0/sdk tarball ($tarball) is missing — run bin/sync-sdk"
+elif [[ -d ../rail0-ts/src ]] && [[ -n "$(find ../rail0-ts/src -newer "$tarball" -type f -print -quit 2>/dev/null)" ]]; then
+  problem "../rail0-ts/src is newer than $tarball — run bin/sync-sdk and commit the result"
+fi
+
+# ── 3. The gate ───────────────────────────────────────────────────────────────
+# Cheaper here than as a failed Vercel build. next build is left to Vercel, which is
+# the build that actually matters; these three catch what it would catch late.
+echo "==> checks (biome, tsc, vitest) ..."
+# 2>&1 as well as >/dev/null: pnpm announces each script on stderr, which would
+# interleave with this script's own findings for no information.
+pnpm lint >/dev/null 2>&1 || problem "pnpm lint failed"
+pnpm typecheck >/dev/null 2>&1 || problem "pnpm typecheck failed"
+pnpm test >/dev/null 2>&1 || problem "pnpm test failed"
+
+# ── 4. What the deployed app needs, which this machine cannot supply ──────────
+# These live in the Vercel project, not in .env.local. Listed rather than checked when
+# the vercel CLI is absent: guessing they are set is how a deploy looks fine and the
+# first checkout does not.
+required=(ANTHROPIC_API_KEY SELLER_PRIVATE_KEY GATEWAY_URL MERCHANT_TOKEN)
+if command -v vercel >/dev/null 2>&1; then
+  echo "==> reading the project's production environment ..."
+  env_list=$(vercel env ls production 2>/dev/null || true)
+  for key in "${required[@]}"; do
+    grep -q "\b${key}\b" <<<"$env_list" || problem "$key is not set in the Vercel project"
+  done
+  # A Redis store is NOT optional here. The file driver writes under .data/, and
+  # Vercel's filesystem is ephemeral and read-only for the app — checkout_begin fails
+  # with EROFS, so the buyer flow dies at the first step.
+  if ! grep -qE "\b(KV_REST_API_URL|UPSTASH_REDIS_REST_URL)\b" <<<"$env_list"; then
+    problem "no Redis store configured (KV_REST_API_URL or UPSTASH_REDIS_REST_URL) — the file store cannot work on Vercel"
+  fi
+else
+  note "vercel CLI not installed, so the project's environment was NOT checked."
+  note "It must carry: ${required[*]}, plus a Redis store"
+  note "  (KV_REST_API_URL + KV_REST_API_TOKEN, or the UPSTASH_REDIS_REST_* pair)."
+  note "Without Redis the buyer checkout fails at the first step: Vercel's filesystem"
+  note "is read-only for the app, so the file store raises EROFS."
+fi
+
+# eve link pulls AI Gateway credentials, and this agent does NOT use them: agent.ts
+# builds a direct provider model (anthropic(...)), so ANTHROPIC_API_KEY is what it
+# reads. Said out loud because linking looks like it has supplied the model access.
+note "the agent uses a direct Anthropic model, not the AI Gateway credentials eve link pulls."
+
+if (( fail )); then
+  echo >&2
+  echo "Refusing to deploy." >&2
+  exit 1
+fi
+
+if $check_only; then
+  echo "OK: preflight passed (nothing deployed)."
+  exit 0
+fi
+
+# ── 5. Deploy ─────────────────────────────────────────────────────────────────
+# `eve deploy` links the directory first when it needs to, so there is no separate
+# `eve link` step here.
+echo "==> eve deploy ..."
+exec pnpm exec eve deploy

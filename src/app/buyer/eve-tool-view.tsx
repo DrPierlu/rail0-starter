@@ -1,7 +1,7 @@
 "use client";
 
 import type { EveDynamicToolPart } from "eve/react";
-import { SigningCard, type SignLoginOutput, type SignPaymentOutput } from "./signing-card";
+import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
 import { type ToolPart, ToolView } from "./tool-views";
 
 // Bridge between eve's `dynamic-tool` parts and the rich tool views built for
@@ -16,6 +16,9 @@ export function EveToolView({
   onRespond,
   onContinue,
   busy,
+  pinnedKey = null,
+  signedKeys,
+  onSigned,
 }: {
   part: EveDynamicToolPart;
   /** Answer a pending HITL request (approve/deny). */
@@ -23,15 +26,35 @@ export function EveToolView({
   /** Send a chat message (the signing cards nudge the agent onward with it). */
   onContinue: (text: string) => void;
   busy: boolean;
+  /** The signing step currently held in the pinned slot, if any. */
+  pinnedKey?: string | null;
+  /** Signing steps already signed, so a transcript copy renders as done. */
+  signedKeys?: ReadonlySet<string>;
+  onSigned?: (key: string) => void;
 }) {
   if (part.state === "output-available") {
-    const output = part.output as { step?: string } | undefined;
-    if (output?.step === "sign_login" || output?.step === "sign_payment") {
+    const signing = asSigningOutput(part.output);
+    if (signing) {
+      const key = signingKey(signing);
+      // The pinned slot holds the ONE interactive instance of a pending step. Rendering
+      // the card here as well would give the same step two independent `state`s, so
+      // signing in one would leave the other still offering to sign. A stub points up
+      // instead, and the transcript keeps its place in the conversation.
+      if (key === pinnedKey) {
+        return (
+          <div className="rounded-lg border border-dashed border-blue-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-blue-900">
+            ↑ {signing.step === "sign_login" ? "Sign in as the buyer" : "Sign the payment"} —
+            waiting for your signature, pinned at the top
+          </div>
+        );
+      }
       return (
         <SigningCard
-          output={output as SignLoginOutput | SignPaymentOutput}
+          output={signing}
           onContinue={onContinue}
           busy={busy}
+          signed={signedKeys?.has(key)}
+          onSigned={onSigned}
         />
       );
     }

@@ -2,9 +2,10 @@
 
 import type { MessageStreamEvent, SessionState } from "eve/client";
 import { useEveAgent } from "eve/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { EveToolView } from "./eve-tool-view";
+import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
 import { useWallet, WalletChip, WalletProvider } from "./wallet";
 
 const SUGGESTIONS = [
@@ -40,26 +41,53 @@ function loadSaved(): SavedChat {
 // and the first client render, then mounts the real chat.
 export default function BuyerPage() {
   const [mounted, setMounted] = useState(false);
+  // Bumped by "New conversation" to REMOUNT the chat. agent.reset() cannot do the job
+  // on its own: the store's owned-session factory closes over the initialSession it was
+  // built with —
+  //   this.#e = e.session ? undefined : () => new Client({…}).session(e.initialSession)
+  // — and Client.session(state) RESUMES that session, where session(undefined) creates a
+  // fresh one. So reset() cleared the local events and then re-bound to the very same
+  // durable session, which replayed its log on the next turn: the old conversation came
+  // back and the newly typed message looked ignored.
+  //
+  // Remounting is what eve's own docs prescribe ("remount the component to point at a
+  // different … session"): a new store reads sessionStorage again, finds it cleared, and
+  // gets initialSession: undefined.
+  const [epoch, setEpoch] = useState(0);
   useEffect(() => setMounted(true), []);
   if (!mounted) {
     return <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4" />;
   }
   return (
     <WalletProvider>
-      <EveChat />
+      <EveChat key={epoch} onNewConversation={() => setEpoch((e) => e + 1)} />
     </WalletProvider>
   );
 }
 
-function EveChat() {
+function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   const [input, setInput] = useState("");
   const [saved] = useState<SavedChat>(loadSaved);
   const { wallet } = useWallet();
+  // Signing steps already signed in this tab. The pinned slot needs it to know when to
+  // let go, and the transcript copies need it to render as done rather than offering a
+  // second signature.
+  const [signedKeys, setSignedKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const onSigned = useCallback((key: string) => {
+    setSignedKeys((current) => new Set(current).add(key));
+  }, []);
+
+  // Set the instant a new conversation is requested. The turn being aborted can still
+  // settle and call onFinish, which would write the OLD transcript back into
+  // sessionStorage we just cleared — and the next reload would restore the very
+  // conversation the user asked to leave.
+  const discardedRef = useRef(false);
 
   const agent = useEveAgent({
     initialEvents: saved.events ?? [],
     initialSession: saved.session,
     onFinish(snapshot) {
+      if (discardedRef.current) return;
       try {
         sessionStorage.setItem(
           TRANSCRIPT_KEY,
@@ -115,19 +143,52 @@ function EveChat() {
   };
 
   const newConversation = () => {
-    agent.reset();
+    // Order matters: refuse further writes, stop the stream, clear the parked
+    // transcript, then remount — so nothing can re-save it on the way out.
+    discardedRef.current = true;
+    agent.stop();
     try {
       sessionStorage.removeItem(TRANSCRIPT_KEY);
     } catch {
       // nothing to clear
     }
+    onNewConversation();
   };
+
+  // The signing step still waiting for a signature — the LAST one the agent produced
+  // that has not been signed. Pinned below the wallet bar so it cannot scroll out of
+  // reach: it is a chat message, and hunting back up the transcript to press Sign was
+  // the whole annoyance. Signing it (or a later step arriving) clears the pin.
+  const pending = useMemo(() => {
+    let last: { key: string; output: ReturnType<typeof asSigningOutput> } | null = null;
+    for (const message of agent.data.messages) {
+      for (const part of message.parts) {
+        if (part.type !== "dynamic-tool" || part.state !== "output-available") continue;
+        const signing = asSigningOutput(part.output);
+        if (!signing) continue;
+        const key = signingKey(signing);
+        last = signedKeys.has(key) ? null : { key, output: signing };
+      }
+    }
+    return last;
+  }, [agent.data.messages, signedKeys]);
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
       <div className="flex justify-end border-b border-neutral-200 py-2 dark:border-neutral-800">
         <WalletChip />
       </div>
+      {pending?.output && (
+        <div className="border-b border-neutral-200 py-2 dark:border-neutral-800">
+          <SigningCard
+            output={pending.output}
+            onContinue={sendText}
+            busy={busy}
+            pinned
+            onSigned={onSigned}
+          />
+        </div>
+      )}
       <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
         {agent.data.messages.length === 0 && (
           <div className="pt-16 text-center">
@@ -185,6 +246,9 @@ function EveChat() {
                       onRespond={respond}
                       onContinue={sendText}
                       busy={busy}
+                      pinnedKey={pending?.key ?? null}
+                      signedKeys={signedKeys}
+                      onSigned={onSigned}
                     />
                   );
                 }

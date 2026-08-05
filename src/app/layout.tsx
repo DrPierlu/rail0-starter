@@ -13,7 +13,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      {/* suppressHydrationWarning covers THIS element's own attributes and text — not
+          its descendants, which keep reporting mismatches normally. Scoped that
+          narrowly it is safe here and nowhere else: the only attribute this app puts on
+          <body> is the constant className above, so there is no real mismatch it could
+          hide. What it does hide is the one that fires on every load — browser
+          extensions inject their own attributes into <body> before React hydrates
+          (ColorZilla's cz-shortcut-listen is the usual culprit), and a console error
+          that is always there and never actionable is how you learn to ignore hydration
+          errors that matter. */}
+      <body className="antialiased" suppressHydrationWarning>
         <header className="border-b border-neutral-200 dark:border-neutral-800">
           <nav className="mx-auto flex max-w-4xl items-center gap-6 px-4 py-3 text-sm">
             <Link href="/" className="flex items-center gap-1.5" aria-label="rail0 starter — home">

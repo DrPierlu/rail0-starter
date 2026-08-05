@@ -20,7 +20,7 @@ just a landing page to pick a side):
 | --- | --- | --- |
 | **Buyer agent** | `agent/` (durable [Vercel eve](https://eve.dev) agent, mounted on this app by `withEve()` in `next.config.ts`) + the chat UI on `/buyer` | Commerce tools: browses the catalog, builds a cart, and on your confirmation runs the three-step checkout below. The session is durable server-side and survives cold starts and deploys |
 | **Storefront API** | `src/app/api/shop/*` + `src/app/api/checkout/*` | The merchant server: products, accepted payment methods (read live from the gateway), orders, and the signature drop-box. Verifies the buyer's payment against the order, then **authorizes it automatically** — funds move to escrow |
-| **Merchant view** | `/merchant` | Minimal back-office: order list with live payment state, **Fulfil & capture** and **Cancel & void** buttons |
+| **Merchant view** | `/merchant` | Minimal back-office: order list with live payment state, **Fulfil & capture** and **Cancel & void** buttons. Gated on `MERCHANT_TOKEN` — sign in once per browser |
 
 Both sides use the [`@rail0/sdk`](https://github.com/commercelayer/rail0-ts)
 TypeScript SDK — no CLI or binary dependency, so the template deploys anywhere
@@ -31,8 +31,11 @@ you connect the buyer wallet in the browser (MetaMask, or a pasted key that
 stays in the tab), and the checkout signs in chat via two signing cards —
 SIWE sign-in, then the EIP-3009 payment authorization. Signatures reach the
 storefront out-of-band (`POST /api/checkout/:id/signature`), never through the
-model's context. The seller key is the only key server-side: that is the
-merchant's own backend signing its own transactions.
+model's context. That drop-box is gated on a per-checkout nonce minted when the
+checkout begins — order ids are not secret, so without it a guessed id could
+overwrite a buyer's stashed signatures and kill the checkout. The seller key is
+the only key server-side: that is the merchant's own backend signing its own
+transactions.
 
 ## The flow
 
@@ -77,10 +80,16 @@ a rail0 gateway to talk to, and an Anthropic API key.
    cp .env.example .env.local
    ```
 
-   Fill in `SELLER_PRIVATE_KEY` and `ANTHROPIC_API_KEY` — that's all a local
-   run requires. Every variable the app reads is listed and commented in
-   [`.env.example`](.env.example); note `SHOP_URL` if you run the app on a
-   non-default port.
+   Fill in `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY` and `MERCHANT_TOKEN`
+   (`openssl rand -hex 32`) — that's all a local run requires. Every variable
+   the app reads is listed and commented in [`.env.example`](.env.example); note
+   `SHOP_URL` if you run the app on a non-default port.
+
+   `MERCHANT_TOKEN` guards the merchant's own endpoints — the order list and
+   capture/void, which move real escrowed funds. They **fail closed**: while it
+   is unset every one of them refuses, with an error that names the variable.
+   Paste the same value into `/merchant` to sign in (it goes into an httpOnly
+   cookie for 8 hours). The buyer's side needs no credential.
 
 4. **Run.**
 
@@ -165,6 +174,19 @@ Two pins worth knowing before you bump anything:
   renders unstyled in the buyer chat, and nothing in the build reports it. `biome.json`
   enables `css.parser.tailwindDirectives` so that `@source` is not a parse error.
 
+### The agent runs in a separate process
+
+`withEve()` runs the agent as a sibling dev server, and its cwd is a **per-build
+snapshot** under `.eve/dev-runtime/snapshots/<id>/source`. Anything the app resolves
+relative to `process.cwd()` therefore resolves differently in the two processes — and
+gets a fresh, empty copy after every rebuild.
+
+That is why `bin/dev` exports `STARTER_DATA_DIR` (and `SHOP_URL`): the browser deposits
+checkout signatures through a Next route while the agent's tools read them, and with a
+cwd-relative path those were two different files. The symptom was a checkout stuck on
+*"the sign-in signature has not arrived yet"* with nothing visibly broken. If you start
+the app with a bare `pnpm dev`, set both by hand.
+
 ### After upgrading `eve`
 
 Upgrading eve invalidates any workflow run that was still in flight, and the dev server
@@ -191,6 +213,32 @@ the order store lives in `.data/store.json` (or Redis) and is untouched.
 
 ## Deploying to Vercel
 
+```bash
+bin/deploy --check   # preflight only
+bin/deploy           # preflight, then `eve deploy`
+```
+
+The deploy itself is **`eve deploy`** — eve's own command. The agent and the Next app are
+one deployable (`withEve` mounts the agent on this app's origin), so there is no second
+service to ship, and `eve deploy` links the directory first when it needs to.
+
+`bin/deploy` adds the preflight: a clean tree (Vercel builds what you push), a vendored
+SDK tarball that is not older than `../rail0-ts/src` (it is the only source of
+`@rail0/sdk` and a tracked artifact, so a stale one ships silently), the three checks,
+and the environment the deployed app needs. It refuses rather than deploying when any of
+those fail. With the `vercel` CLI installed it reads the project's production
+environment; without it, it prints what must be there.
+
+Two things worth knowing before the first deploy:
+
+- **A Redis store is not optional.** Vercel's filesystem is read-only for the app, so the
+  file driver raises `EROFS` at `checkout_begin` and the buyer flow dies at step one.
+- **`eve link` pulls AI Gateway credentials that this agent does not use.** `agent.ts`
+  builds a direct provider model (`anthropic(...)`), so `ANTHROPIC_API_KEY` is what it
+  reads — linking can look like it has supplied model access when it has not.
+
+Manual equivalent, and what to set up once:
+
 1. Push the repo to GitHub and import it in Vercel (the SDK tarball in
    `vendor/` makes the install self-contained).
 2. Add a Redis store: the file store cannot work on Vercel's ephemeral
@@ -199,21 +247,38 @@ the order store lives in `.data/store.json` (or Redis) and is untouched.
    `UPSTASH_REDIS_REST_URL`/`_TOKEN`). When those are present the order
    store automatically lives in a single Redis key instead of `.data/`.
 3. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
-   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`.
+   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` (without it the
+   deployed `/merchant` refuses every request — it fails closed, which on a
+   public URL is the only safe default).
 4. Make sure the seller wallet is registered as a payee on that gateway with
    its tokens active and holds gas, and the buyer wallet holds the stablecoin.
 
 ## Notes for a real integration
 
 - **Order store**: a deliberately tiny single-user document store
-  (`.data/store.json` locally, one Redis key on Vercel) with no locking —
-  swap `src/lib/store.ts` for a real database.
+  (`.data/store.json` locally, one Redis key on Vercel). Read-modify-write goes
+  through `DocStore.mutate`, which serializes overlapping callers **inside one
+  process** — enough for the order-list refresh, which updates every order at
+  once on each poll, and which used to silently drop the checkout's write-ahead.
+  It is NOT safe across instances (several Vercel lambdas, or the Next app and
+  the agent service on the same Redis key): the whole document is still
+  rewritten, with no compare-and-set. Swap `src/lib/store.ts` for a real
+  database before more than one writer exists. A document that exists and cannot
+  be read (truncated JSON, bad permissions, a corrupt Redis value) is a loud 500
+  naming the file or key — never an empty store, because `mutate` writes what it
+  read straight back and would erase it.
 - **The seller key in an env var** is demo-grade: in production it belongs in
   a proper secret store or signer. The buyer side already models the real
   thing — the key stays in the buyer's own wallet, and the gateway never
   custodies keys.
 - **Catalog** is a static `catalog.json`; the merchant identity is just the
   seller wallet — no accounts to create.
+- **The merchant gate is one shared token**, which is the right size for a
+  single-operator template and not for a real back-office: capture/void and the
+  order list are exactly as protected as that one secret. A real integration puts
+  merchant accounts and roles in front of them (and scopes orders to a buyer, so
+  the per-order read is authenticated too — here it is open, which is what lets
+  the buyer poll its own order without a credential).
 - The SDK is vendored as a tarball in `vendor/` until `@rail0/sdk` is published
   to npm. To pick up rail0-ts changes run `bin/sync-sdk` (builds and packs the
   sibling `../rail0-ts` — override with `RAIL0_TS_DIR` — straight into

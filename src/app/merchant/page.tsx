@@ -12,6 +12,11 @@ export default function Merchant() {
   // asks for a second click instead of firing immediately.
   const [confirmingVoid, setConfirmingVoid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The dashboard is not told the merchant token — it is asked for it. The 401
+  // from the order list IS the sign-in trigger, so nothing here has to know
+  // whether the cookie is present or still valid.
+  const [signedOut, setSignedOut] = useState(false);
+  const [token, setToken] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -19,14 +24,47 @@ export default function Merchant() {
       const body = await res.json();
       if (res.ok) {
         setOrders(body.orders);
+        setSignedOut(false);
         setError(null);
+      } else if (res.status === 401) {
+        // Deliberately leaves `error` alone: this poll runs every 4s, and clearing
+        // it here wiped the "invalid merchant token" the sign-in had just set,
+        // before it could be read. A stale message clears on the next success.
+        setSignedOut(true);
+        setOrders([]);
       } else {
+        // Everything else keeps its message — notably the 500 that names an
+        // unset MERCHANT_TOKEN, which no amount of signing in would fix.
         setError(body.error ?? "failed to load orders");
       }
     } catch {
       setError("failed to load orders");
     }
   }, []);
+
+  // Sign in with the token from the server's env: the cookie the route sets is
+  // httpOnly, so every later fetch on this page carries it without the page
+  // ever holding the credential.
+  const signIn = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const res = await fetch("/api/shop/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? "sign-in failed");
+        return;
+      }
+      setToken("");
+      setError(null);
+      await refresh();
+    } catch {
+      setError("sign-in failed");
+    }
+  };
 
   useEffect(() => {
     refresh();
@@ -42,8 +80,25 @@ export default function Merchant() {
         method: "POST",
       });
       const body = await res.json();
-      if (!res.ok) setError(body.error ?? `${action} failed`);
-      await refresh();
+      if (res.ok) {
+        await refresh();
+      } else {
+        // Set the message and DON'T refresh. refresh()'s success branch calls
+        // setError(null), so refreshing after a failed action wiped the very message
+        // that explains why it failed — a 409 or 422 from capture/void was gone
+        // within a render. The list is a second behind until the 4s poll catches up,
+        // which is the right trade for a merchant who needs to read why the action
+        // they just took on real escrowed funds did not happen.
+        setError(body.error ?? `${action} failed`);
+      }
+    } catch {
+      // The fetch itself failing (the server down mid-action, a non-JSON body) had
+      // no handler: the promise onClick returned rejected unhandled, so nothing was
+      // shown and the button simply snapped back as if the click had never happened
+      // — on capture and void, the two things that move real escrowed funds. Same
+      // message shape as refresh()/signIn(). The refresh above is skipped on this
+      // path, which is what keeps the message on screen.
+      setError(`${action} failed — the storefront could not be reached`);
     } finally {
       setActing(null);
     }
@@ -62,7 +117,32 @@ export default function Merchant() {
           {error}
         </p>
       )}
-      {orders.length === 0 ? (
+      {signedOut ? (
+        <form onSubmit={signIn} className="mx-auto mt-10 max-w-sm">
+          <label htmlFor="merchant-token" className="text-sm font-medium">
+            Merchant token
+          </label>
+          <p className="mt-1 text-xs text-neutral-500">
+            The value of <code className="font-mono">MERCHANT_TOKEN</code> on the server. Capture
+            and void move real escrowed funds, so the dashboard is gated on it.
+          </p>
+          <input
+            id="merchant-token"
+            type="password"
+            autoComplete="off"
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            className="mt-3 w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          />
+          <button
+            type="submit"
+            disabled={token.length === 0}
+            className="mt-3 w-full rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          >
+            Sign in
+          </button>
+        </form>
+      ) : orders.length === 0 ? (
         <p className="mt-10 text-center text-sm text-neutral-500">
           No orders yet —{" "}
           <Link

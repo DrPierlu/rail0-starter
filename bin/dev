@@ -7,14 +7,29 @@ cd "$(dirname "$0")/.."
 if [ ! -f .env.local ]; then
   cp .env.example .env.local
   echo "Created .env.local from .env.example."
-  echo "Fill in SELLER_PRIVATE_KEY and ANTHROPIC_API_KEY, then run bin/dev again."
+  echo "Fill in SELLER_PRIVATE_KEY, ANTHROPIC_API_KEY and MERCHANT_TOKEN, then run bin/dev again."
   exit 1
 fi
 
-missing=$(grep -E '^(SELLER_PRIVATE_KEY|ANTHROPIC_API_KEY)=\s*$' .env.local | cut -d= -f1 || true)
+# MERCHANT_TOKEN is checked like a key, not like an option: the merchant endpoints
+# fail closed without it, so /merchant would load and then refuse every request.
+#
+# ABSENT counts as missing, not just empty. An .env.local created before a variable
+# existed has no line for it at all, so a `KEY=\s*$` match alone passed the
+# preflight and moved the failure to the first request — which is the one place
+# this check exists to prevent.
+missing=""
+for key in SELLER_PRIVATE_KEY ANTHROPIC_API_KEY MERCHANT_TOKEN; do
+  value=$(grep -E "^${key}=" .env.local | head -1 | cut -d= -f2- || true)
+  # Strip surrounding whitespace so a "KEY= " line reads as unset.
+  if [ -z "$(printf '%s' "$value" | tr -d '[:space:]')" ]; then
+    missing="${missing}${key}"$'\n'
+  fi
+done
 if [ -n "$missing" ]; then
   echo "Missing values in .env.local:"
-  echo "$missing" | sed 's/^/  - /'
+  printf '%s' "$missing" | sed 's/^/  - /'
+  echo "(generate a MERCHANT_TOKEN with \`openssl rand -hex 32\`)"
   exit 1
 fi
 
@@ -43,6 +58,13 @@ set +a
 # shop calls reached a different application that answers them.
 port=4000
 export SHOP_URL="${SHOP_URL:-http://localhost:$port}"
+
+# Both processes must resolve the SAME data directory. The eve agent service runs with
+# its cwd inside a per-build snapshot (.eve/dev-runtime/snapshots/<id>/source), so a
+# cwd-relative .data/ meant the browser deposited checkout signatures in one file while
+# the agent read another — freshly empty after every rebuild — and the checkout hung on
+# "the sign-in signature has not arrived yet".
+export STARTER_DATA_DIR="${STARTER_DATA_DIR:-$PWD/.data}"
 
 # Next silently moves to the next free port when this one is taken, which would
 # leave SHOP_URL pointing at whoever holds it. Say so rather than let the agent

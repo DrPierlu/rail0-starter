@@ -14,6 +14,13 @@ export interface SignLoginOutput {
   total: string;
   token: string;
   siwe_message: string;
+  /**
+   * The checkout's deposit secret, minted server-side at checkout_begin. Presented
+   * on the POST below: the order id is not secret (it is 8 hex characters and it
+   * travels through the chat), so without this anyone who guessed one could
+   * overwrite this buyer's stashed signatures and kill the checkout.
+   */
+  deposit_nonce: string;
 }
 
 export interface SignPaymentOutput {
@@ -21,17 +28,49 @@ export interface SignPaymentOutput {
   order_id: string;
   rail0_id: string;
   signing_payload: SigningPayload;
+  /** Same nonce as step 1's — one per checkout. */
+  deposit_nonce: string;
+}
+
+export type SigningOutput = SignLoginOutput | SignPaymentOutput;
+
+/** Narrow an arbitrary tool output to a signing step, or null. */
+export function asSigningOutput(output: unknown): SigningOutput | null {
+  const step = (output as { step?: string } | undefined)?.step;
+  return step === "sign_login" || step === "sign_payment" ? (output as SigningOutput) : null;
+}
+
+// Identity of a signing step: which step, on which order. Stable across renders and
+// across the transcript being restored from sessionStorage, unlike a part index —
+// which is what the pinned slot has to key on to know whether THIS card is the one
+// still waiting for a signature.
+export function signingKey(output: SigningOutput): string {
+  return `${output.step}:${output.order_id}`;
 }
 
 export function SigningCard({
   output,
   onContinue,
   busy,
+  signed = false,
+  pinned = false,
+  onSigned,
 }: {
-  output: SignLoginOutput | SignPaymentOutput;
+  output: SigningOutput;
   /** Sends a chat message so the agent proceeds to the next checkout step. */
   onContinue: (text: string) => void;
   busy: boolean;
+  /**
+   * Already signed, as recorded by the page. The card keeps its own `state` for the
+   * instance that did the signing, but a card re-rendered later (the transcript copy,
+   * once the pinned one is done) has no such state — without this it would offer to
+   * sign an already-signed step.
+   */
+  signed?: boolean;
+  /** Rendered in the pinned slot: drop the "come back to this card" instruction. */
+  pinned?: boolean;
+  /** Reports the signature so the page can stop pinning this step. */
+  onSigned?: (key: string) => void;
 }) {
   const { wallet } = useWallet();
   const [state, setState] = useState<"idle" | "signing" | "done" | "error">("idle");
@@ -56,13 +95,18 @@ export function SigningCard({
       const res = await fetch(`/api/checkout/${output.order_id}/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: isLogin ? "siwe" : "eip3009", signature }),
+        body: JSON.stringify({
+          kind: isLogin ? "siwe" : "eip3009",
+          signature,
+          nonce: output.deposit_nonce,
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `stash failed with ${res.status}`);
       }
       setState("done");
+      onSigned?.(signingKey(output));
       onContinue(
         isLogin
           ? "I signed the login — continue the checkout."
@@ -100,7 +144,7 @@ export function SigningCard({
         </p>
       )}
       <div className="mt-3 flex items-center gap-3">
-        {state === "done" ? (
+        {signed || state === "done" ? (
           <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
             Signed ✓ — the agent is picking it up
           </span>
@@ -119,7 +163,9 @@ export function SigningCard({
           </button>
         ) : (
           <span className="text-xs text-amber-600 dark:text-amber-400">
-            Connect the buyer wallet at the top of the page first.
+            {pinned
+              ? "Connect the buyer wallet just above to sign."
+              : "Connect the buyer wallet in the bar at the top of the page, then come back to this card to sign."}
           </span>
         )}
         {error && <span className="text-xs text-red-500">{error}</span>}
