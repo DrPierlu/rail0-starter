@@ -13,10 +13,23 @@ fi
 
 # MERCHANT_TOKEN is checked like a key, not like an option: the merchant endpoints
 # fail closed without it, so /merchant would load and then refuse every request.
-missing=$(grep -E '^(SELLER_PRIVATE_KEY|ANTHROPIC_API_KEY|MERCHANT_TOKEN)=\s*$' .env.local | cut -d= -f1 || true)
+#
+# ABSENT counts as missing, not just empty. An .env.local created before a variable
+# existed has no line for it at all, so a `KEY=\s*$` match alone passed the
+# preflight and moved the failure to the first request — which is the one place
+# this check exists to prevent.
+missing=""
+for key in SELLER_PRIVATE_KEY ANTHROPIC_API_KEY MERCHANT_TOKEN; do
+  value=$(grep -E "^${key}=" .env.local | head -1 | cut -d= -f2- || true)
+  # Strip surrounding whitespace so a "KEY= " line reads as unset.
+  if [ -z "$(printf '%s' "$value" | tr -d '[:space:]')" ]; then
+    missing="${missing}${key}"$'\n'
+  fi
+done
 if [ -n "$missing" ]; then
   echo "Missing values in .env.local:"
-  echo "$missing" | sed 's/^/  - /'
+  printf '%s' "$missing" | sed 's/^/  - /'
+  echo "(generate a MERCHANT_TOKEN with \`openssl rand -hex 32\`)"
   exit 1
 fi
 
