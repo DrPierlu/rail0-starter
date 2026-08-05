@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { EveToolView } from "./eve-tool-view";
 import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
+import { orderCardOrderId } from "./tool-views";
 import { useWallet, WalletChip, WalletProvider } from "./wallet";
 
 const SUGGESTIONS = [
@@ -173,6 +174,33 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     return last;
   }, [agent.data.messages, signedKeys]);
 
+  // Repeat OrderCards for the same order, by "{messageId}:{partIndex}".
+  //
+  // While a payment confirms, the agent calls order_status again and again ("I'll check
+  // again"), and each output rendered its own card — four identical #84aa1a40 cards
+  // stacked down the transcript. Not just noise: OrderCard polls
+  // /api/shop/orders/{id} on its own, so every copy was another 3s loop against the
+  // same order, and each of those does a read-modify-write on the store.
+  //
+  // The FIRST card is the one kept. It sits where the payment actually happened, next
+  // to "your payment has been submitted", and it is live — it polls itself to the
+  // terminal state, so a later copy could never show anything the first one won't.
+  const supersededCards = useMemo(() => {
+    const seen = new Map<string, string>();
+    const superseded = new Set<string>();
+    for (const message of agent.data.messages) {
+      message.parts.forEach((part, i) => {
+        if (part.type !== "dynamic-tool" || part.state !== "output-available") return;
+        const orderId = orderCardOrderId(part.toolName, part.output);
+        if (!orderId) return;
+        const key = `${message.id}:${i}`;
+        if (seen.has(orderId)) superseded.add(key);
+        else seen.set(orderId, key);
+      });
+    }
+    return superseded;
+  }, [agent.data.messages]);
+
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
       <div className="flex justify-end border-b border-neutral-200 py-2 dark:border-neutral-800">
@@ -248,6 +276,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
                       pinnedKey={pending?.key ?? null}
                       signedKeys={signedKeys}
                       onSigned={onSigned}
+                      supersededCard={supersededCards.has(`${message.id}:${i}`)}
                     />
                   );
                 }

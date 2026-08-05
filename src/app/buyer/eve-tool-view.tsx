@@ -19,6 +19,7 @@ export function EveToolView({
   pinnedKey = null,
   signedKeys,
   onSigned,
+  supersededCard = false,
 }: {
   part: EveDynamicToolPart;
   /** Answer a pending HITL request (approve/deny). */
@@ -31,7 +32,20 @@ export function EveToolView({
   /** Signing steps already signed, so a transcript copy renders as done. */
   signedKeys?: ReadonlySet<string>;
   onSigned?: (key: string) => void;
+  /** An OrderCard for an order already shown earlier in the transcript. */
+  supersededCard?: boolean;
 }) {
+  // A repeat status check for an order already on screen. The card kept is the first
+  // one, where the payment happened, and it polls itself — so a second card could only
+  // duplicate it, and its polling. The check is still worth showing as a line.
+  if (part.state === "output-available" && supersededCard) {
+    return (
+      <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-700">
+        ↑ status checked — the card above is live
+      </div>
+    );
+  }
+
   if (part.state === "output-available") {
     const signing = asSigningOutput(part.output);
     if (signing) {

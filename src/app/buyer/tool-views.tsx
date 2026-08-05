@@ -255,3 +255,22 @@ export function ToolChip({ part }: { part: ToolPart }) {
     </div>
   );
 }
+
+/**
+ * The order an OrderCard would be put on screen for by this tool output, if any.
+ *
+ * Exported so the transcript can tell that two parts render a card for the SAME order
+ * and keep one — the dedupe has to happen across messages, which no single part can
+ * see. Kept here, next to the switch that decides it, so the two cannot drift.
+ */
+export function orderCardOrderId(toolName: string, output: unknown): string | undefined {
+  const o = output as Record<string, unknown> | undefined;
+  if (toolName === "checkout_submit") {
+    return typeof o?.order_id === "string" ? o.order_id : undefined;
+  }
+  if (toolName === "order_status") {
+    const order = o?.order as { id?: unknown } | undefined;
+    return typeof order?.id === "string" ? order.id : undefined;
+  }
+  return undefined;
+}
