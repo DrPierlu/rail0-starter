@@ -20,19 +20,46 @@ export function merchantName(): string {
   return catalog.merchant.name;
 }
 
+/**
+ * Products, optionally narrowed by category and free-text search.
+ *
+ * `search` matches on ANY word of the query, against name, description AND category,
+ * ranked by how many of the query's words a product matches.
+ *
+ * It used to be one literal substring match over name and description, which failed in
+ * two ways worth naming, because both showed up as "no matching products" followed by the
+ * agent retrying — the buyer saw the empty attempt.
+ *
+ *   A multi-word query never matched. "short sleeve tee" is not a substring of any
+ *   description, so a perfectly sensible request found nothing while "tee" alone worked.
+ *
+ *   The catalog's own vocabulary was unreachable. Every product here is a `Tee` in
+ *   category `T-Shirts`, so searching "t-shirt" — the word a buyer actually uses — matched
+ *   nothing at all. Category is searched now, and "t-shirt" is a substring of "t-shirts".
+ *
+ * Word-level OR is deliberately forgiving: with a small catalog, too many results the
+ * agent can narrow beats zero results it has to guess its way out of. Ranking is what
+ * keeps that honest — a product matching two query words sorts above one matching one —
+ * and the sort is stable, so equal scores keep the catalog's own order.
+ */
 export function listProducts(filter?: { category?: string; search?: string }): Product[] {
   let products = catalog.products;
   if (filter?.category) {
     const c = filter.category.toLowerCase();
     products = products.filter((p) => p.category.toLowerCase() === c);
   }
-  if (filter?.search) {
-    const s = filter.search.toLowerCase();
-    products = products.filter(
-      (p) => p.name.toLowerCase().includes(s) || p.description.toLowerCase().includes(s),
-    );
-  }
-  return products;
+
+  const words = (filter?.search ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return products;
+
+  return products
+    .map((p) => {
+      const haystack = `${p.name} ${p.description} ${p.category}`.toLowerCase();
+      return { p, score: words.filter((w) => haystack.includes(w)).length };
+    })
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((m) => m.p);
 }
 
 export function listCategories(): string[] {

@@ -27,3 +27,6 @@ Rules:
   order_status before declaring the order in escrow.
 - Amounts in the catalog are stablecoin prices (e.g. USDC). Never invent
   products, prices, or payment methods — always read them through the tools.
+- The catalog is written in ENGLISH. Reply in the shopper's language, but
+  translate their words before you search: `list_products` matched nothing when
+  handed a phrase in another language, and the shopper saw the empty attempt.
