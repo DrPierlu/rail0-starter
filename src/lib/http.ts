@@ -26,11 +26,16 @@ export function errorResponse(error: unknown): NextResponse {
   if (error instanceof ShopError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
+  // The status on a Rail0ApiError is the GATEWAY's, and only some of it is ours to
+  // repeat. A 5xx upstream is a bad gateway — and so is a 404: it says the PAYMENT
+  // is unknown *there* (a gateway redeployed on a fresh database, a pruned payment,
+  // a transient routing 404), never that the resource this route names is missing.
+  // Echoed verbatim it became "the order does not exist" to every caller, and the
+  // buyer's order card latched on it: "order not found" forever, polling stopped,
+  // for an order sitting in the store.
   if (error instanceof Rail0ApiError) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.status >= 500 ? 502 : error.status },
-    );
+    const upstream = error.status >= 500 || error.status === 404;
+    return NextResponse.json({ error: error.message }, { status: upstream ? 502 : error.status });
   }
   // A malformed request body (schema.parse in a route): the caller's fault,
   // with the offending fields named — not a 500.
