@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { fromCents, getProduct, toCents } from "@/lib/catalog";
 import { errorResponse } from "@/lib/http";
+import { requireMerchant } from "@/lib/merchant-auth";
 import { addressFor } from "@/lib/rail0";
 import { listPaymentMethods, refreshOrder, ShopError } from "@/lib/shop";
 import { type CartLine, createOrder, listOrders } from "@/lib/store";
@@ -20,8 +21,15 @@ const createSchema = z.object({
   token_address: z.string(),
 });
 
-export async function GET() {
+/**
+ * The merchant's whole order book — gated. It is the id oracle for the two
+ * money-moving routes (capture/void take an 8-hex order id and nothing else),
+ * and it exposes every buyer's orders to whoever asks. The buyer reads its own
+ * order through GET /api/shop/orders/[id], which stays open.
+ */
+export async function GET(request: NextRequest) {
   try {
+    requireMerchant(request);
     const stored = await listOrders();
     // allSettled, not all: refreshOrder calls the gateway per order, and one
     // sick order (a rail0_id the gateway 404s, one timeout) used to fail the

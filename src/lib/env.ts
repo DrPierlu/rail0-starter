@@ -19,6 +19,11 @@ const schema = z.object({
   }),
   SIWE_CHAIN_ID: z.coerce.number().int().default(1),
   AI_MODEL: z.string().default("claude-sonnet-5"),
+  // Optional HERE and required by the gate that reads it (lib/merchant-auth.ts):
+  // the buyer's routes must keep working without it, while the merchant's refuse
+  // to run at all — a schema-level requirement would take the whole app down
+  // instead of just the surface the token protects.
+  MERCHANT_TOKEN: z.string().min(1).optional(),
 });
 
 type Env = z.infer<typeof schema>;
@@ -34,6 +39,7 @@ export function env(): Env {
       SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
+      MERCHANT_TOKEN: process.env.MERCHANT_TOKEN || undefined,
     });
     if (!parsed.success) {
       const detail = parsed.error.issues

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { beginCheckout } from "../../src/lib/buyer";
 import { shopBase } from "../lib/base";
 import { getCart } from "../lib/cart";
+import { rememberOrder } from "../lib/orders";
 
 export default defineTool({
   description:
@@ -29,6 +30,9 @@ export default defineTool({
       token_address,
       buyer_address,
     );
+    // The buyer's own record of the order, so `my_orders` never needs the
+    // merchant's (now gated) order book.
+    await rememberOrder(order.id);
     return {
       step: "sign_login",
       order_id: order.id,

@@ -20,7 +20,7 @@ just a landing page to pick a side):
 | --- | --- | --- |
 | **Buyer agent** | `agent/` (durable [Vercel eve](https://eve.dev) agent, mounted on this app by `withEve()` in `next.config.ts`) + the chat UI on `/buyer` | Commerce tools: browses the catalog, builds a cart, and on your confirmation runs the three-step checkout below. The session is durable server-side and survives cold starts and deploys |
 | **Storefront API** | `src/app/api/shop/*` + `src/app/api/checkout/*` | The merchant server: products, accepted payment methods (read live from the gateway), orders, and the signature drop-box. Verifies the buyer's payment against the order, then **authorizes it automatically** — funds move to escrow |
-| **Merchant view** | `/merchant` | Minimal back-office: order list with live payment state, **Fulfil & capture** and **Cancel & void** buttons |
+| **Merchant view** | `/merchant` | Minimal back-office: order list with live payment state, **Fulfil & capture** and **Cancel & void** buttons. Gated on `MERCHANT_TOKEN` — sign in once per browser |
 
 Both sides use the [`@rail0/sdk`](https://github.com/commercelayer/rail0-ts)
 TypeScript SDK — no CLI or binary dependency, so the template deploys anywhere
@@ -77,10 +77,16 @@ a rail0 gateway to talk to, and an Anthropic API key.
    cp .env.example .env.local
    ```
 
-   Fill in `SELLER_PRIVATE_KEY` and `ANTHROPIC_API_KEY` — that's all a local
-   run requires. Every variable the app reads is listed and commented in
-   [`.env.example`](.env.example); note `SHOP_URL` if you run the app on a
-   non-default port.
+   Fill in `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY` and `MERCHANT_TOKEN`
+   (`openssl rand -hex 32`) — that's all a local run requires. Every variable
+   the app reads is listed and commented in [`.env.example`](.env.example); note
+   `SHOP_URL` if you run the app on a non-default port.
+
+   `MERCHANT_TOKEN` guards the merchant's own endpoints — the order list and
+   capture/void, which move real escrowed funds. They **fail closed**: while it
+   is unset every one of them refuses, with an error that names the variable.
+   Paste the same value into `/merchant` to sign in (it goes into an httpOnly
+   cookie for 8 hours). The buyer's side needs no credential.
 
 4. **Run.**
 
@@ -238,7 +244,9 @@ Manual equivalent, and what to set up once:
    `UPSTASH_REDIS_REST_URL`/`_TOKEN`). When those are present the order
    store automatically lives in a single Redis key instead of `.data/`.
 3. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
-   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`.
+   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` (without it the
+   deployed `/merchant` refuses every request — it fails closed, which on a
+   public URL is the only safe default).
 4. Make sure the seller wallet is registered as a payee on that gateway with
    its tokens active and holds gas, and the buyer wallet holds the stablecoin.
 
@@ -253,6 +261,12 @@ Manual equivalent, and what to set up once:
   custodies keys.
 - **Catalog** is a static `catalog.json`; the merchant identity is just the
   seller wallet — no accounts to create.
+- **The merchant gate is one shared token**, which is the right size for a
+  single-operator template and not for a real back-office: capture/void and the
+  order list are exactly as protected as that one secret. A real integration puts
+  merchant accounts and roles in front of them (and scopes orders to a buyer, so
+  the per-order read is authenticated too — here it is open, which is what lets
+  the buyer poll its own order without a credential).
 - The SDK is vendored as a tarball in `vendor/` until `@rail0/sdk` is published
   to npm. To pick up rail0-ts changes run `bin/sync-sdk` (builds and packs the
   sibling `../rail0-ts` — override with `RAIL0_TS_DIR` — straight into

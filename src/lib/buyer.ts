@@ -78,7 +78,10 @@ export function getShop(base: string) {
         }[];
       }>(base, "/api/shop/payment-methods"),
     order: (id: string) => shopFetch<{ order: Order }>(base, `/api/shop/orders/${id}`),
-    orders: () => shopFetch<{ orders: Order[] }>(base, "/api/shop/orders"),
+    // No `orders()` here on purpose: GET /api/shop/orders is the merchant's
+    // order book, gated on the merchant token, and the buyer side holds no such
+    // credential. A buyer lists the orders IT placed (agent/lib/orders.ts) and
+    // reads each one by id.
   };
 }
 
