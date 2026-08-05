@@ -4,8 +4,9 @@ import type { MessageStreamEvent, SessionState } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
+import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
-import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
+import { asSigningOutput, signingKey } from "./signing-card";
 import { orderCardOrderId } from "./tool-views";
 import { useWallet, WalletChip, WalletProvider } from "./wallet";
 
@@ -192,32 +193,35 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     return last;
   }, [agent.data.messages, signedKeys]);
 
-  // Repeat OrderCards for the same order, by "{messageId}:{partIndex}".
+  // Two things derived from one walk of the transcript:
   //
-  // While a payment confirms, the agent calls order_status again and again ("I'll check
-  // again"), and each output rendered its own card — four identical #84aa1a40 cards
-  // stacked down the transcript. Not just noise: OrderCard polls
-  // /api/shop/orders/{id} on its own, so every copy was another 3s loop against the
-  // same order, and each of those does a read-modify-write on the store.
+  //   superseded — repeat OrderCards for the same order, by toolCallId. The agent calls
+  //     order_status again and again while a payment confirms, and each output rendered
+  //     its own card. Keyed on toolCallId, which dynamic-tool parts DO carry — the
+  //     "parts have no stable id" note on the render loop below is about text parts. It
+  //     has to be computed across ALL messages, which no single part can see.
   //
-  // The FIRST card is the one kept. It sits where the payment actually happened, next
-  // to "your payment has been submitted", and it is live — it polls itself to the
-  // terminal state, so a later copy could never show anything the first one won't.
-  const supersededCards = useMemo(() => {
+  //   lastOrderId — the checkout the docked panel is about, when no signature is owed.
+  const { superseded, lastOrderId } = useMemo(() => {
     const seen = new Map<string, string>();
     const superseded = new Set<string>();
+    let lastOrderId: string | undefined;
     for (const message of agent.data.messages) {
-      message.parts.forEach((part, i) => {
-        if (part.type !== "dynamic-tool" || part.state !== "output-available") return;
+      for (const part of message.parts) {
+        if (part.type !== "dynamic-tool" || part.state !== "output-available") continue;
         const orderId = orderCardOrderId(part.toolName, part.output);
-        if (!orderId) return;
-        const key = `${message.id}:${i}`;
-        if (seen.has(orderId)) superseded.add(key);
-        else seen.set(orderId, key);
-      });
+        if (!orderId) continue;
+        lastOrderId = orderId;
+        if (seen.has(orderId)) superseded.add(part.toolCallId);
+        else seen.set(orderId, part.toolCallId);
+      }
     }
-    return superseded;
+    return { superseded, lastOrderId };
   }, [agent.data.messages]);
+
+  // A signature owed names its own order; otherwise it is the last one mentioned. This
+  // is the order the panel goes live on, and the one the transcript stops duplicating.
+  const activeOrderId = pending?.output?.order_id ?? lastOrderId;
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
@@ -284,7 +288,8 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
                       pinnedKey={pending?.key ?? null}
                       signedKeys={signedKeys}
                       onSigned={onSigned}
-                      supersededCard={supersededCards.has(`${message.id}:${i}`)}
+                      supersededCard={superseded.has(part.toolCallId)}
+                      activeOrderId={activeOrderId}
                     />
                   );
                 }
@@ -320,22 +325,20 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
           </button>
         </div>
       )}
-      {/* The active step, docked to the composer.
-          It used to sit at the TOP, under the wallet bar, which is what made the flow
-          feel like it jumped: you read the newest message at the bottom, then the thing
-          to act on was at the other end of the screen, then the reply came back at the
-          bottom again. Here it is where attention already is — next to where you type
-          and where new messages arrive — so control never moves. */}
-      {pending?.output && (
-        <div className="border-t border-neutral-200 pt-2 dark:border-neutral-800">
-          <SigningCard
-            output={pending.output}
-            onContinue={sendText}
-            busy={busy}
-            onSigned={onSigned}
-          />
-        </div>
-      )}
+      {/* Everything actionable or live lives here, docked to the composer.
+          It used to sit at the TOP, which is what made the flow feel like it jumped:
+          you read the newest message at the bottom, then the thing to act on was at the
+          other end of the screen, then the reply came back at the bottom again. And it
+          was not even the only live surface — the order status polled away in a card a
+          few messages up. One box, one position, one thing at a time. */}
+      <CheckoutPanel
+        signing={pending?.output ?? undefined}
+        orderId={activeOrderId}
+        onContinue={sendText}
+        busy={busy}
+        signed={pending ? signedKeys.has(pending.key) : undefined}
+        onSigned={onSigned}
+      />
       <form
         onSubmit={(e) => {
           e.preventDefault();

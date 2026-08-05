@@ -20,6 +20,7 @@ export function EveToolView({
   signedKeys,
   onSigned,
   supersededCard = false,
+  activeOrderId,
 }: {
   part: EveDynamicToolPart;
   /** Answer a pending HITL request (approve/deny). */
@@ -34,6 +35,8 @@ export function EveToolView({
   onSigned?: (key: string) => void;
   /** An OrderCard for an order already shown earlier in the transcript. */
   supersededCard?: boolean;
+  /** The order the docked panel is live on. */
+  activeOrderId?: string;
 }) {
   // A repeat status check for an order already on screen. The card kept is the first
   // one, where the payment happened, and it polls itself — so a second card could only
@@ -134,5 +137,5 @@ export function EveToolView({
     output: part.state === "output-available" ? part.output : undefined,
     errorText: part.state === "output-error" ? part.errorText : undefined,
   };
-  return <ToolView part={mapped} />;
+  return <ToolView part={mapped} activeOrderId={activeOrderId} />;
 }

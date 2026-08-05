@@ -7,20 +7,41 @@ import type { Order } from "@/lib/store";
 import { CopyableId, StateBadge } from "../ui";
 
 /**
- * Live order card rendered in the chat after a checkout (and for
- * order_status lookups). The escrow confirms asynchronously, so the card
- * polls the storefront until the order reaches a terminal state — the user
- * watches authorize → in_escrow happen instead of having to ask the agent to
- * re-check. `in_escrow` keeps polling on purpose: a capture or void done on
- * /merchant flips this card to settled/cancelled in place.
+ * An order card in the chat.
+ *
+ * `live` decides whether it polls. It used to always poll, which was right when it was
+ * the only place an order's state appeared — the escrow confirms asynchronously, so the
+ * buyer watched authorize → in_escrow happen instead of asking the agent to re-check.
+ * But the agent re-checks by calling order_status, and every call rendered another card:
+ * several copies of one order, each with its own 3s loop, each doing a read-modify-write
+ * on the store.
+ *
+ * Now the docked CheckoutPanel is the single live surface for the ACTIVE order and does
+ * that polling once. Everything in the transcript is a snapshot — what was true when the
+ * agent looked — so it renders `initial` and leaves it alone.
  */
-export function OrderCard({ orderId, initial }: { orderId: string; initial?: Order }) {
+export function OrderCard({
+  orderId,
+  initial,
+  live = true,
+}: {
+  orderId: string;
+  initial?: Order;
+  /** Poll the storefront until terminal. False renders `initial` as a snapshot. */
+  live?: boolean;
+}) {
   const [order, setOrder] = useState<Order | undefined>(initial);
   const [gone, setGone] = useState(false);
 
+  // Keep `initial` in step when the parent re-fetches it (the panel passes the order it
+  // polled), so a snapshot card is not frozen at the value it first mounted with.
+  useEffect(() => {
+    if (initial) setOrder(initial);
+  }, [initial]);
+
   const state = order?.state;
   useEffect(() => {
-    if (gone || (state && TERMINAL_STATES.has(state))) return;
+    if (!live || gone || (state && TERMINAL_STATES.has(state))) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -47,7 +68,7 @@ export function OrderCard({ orderId, initial }: { orderId: string; initial?: Ord
       cancelled = true;
       clearInterval(interval);
     };
-  }, [orderId, state, gone]);
+  }, [orderId, state, gone, live]);
 
   if (gone) {
     return (
