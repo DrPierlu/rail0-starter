@@ -54,3 +54,36 @@ export function currentStep(input: {
 export function stepIndex(step: CheckoutStep): number {
   return step === "done" ? CHECKOUT_STEPS.length : CHECKOUT_STEPS.indexOf(step);
 }
+
+/** A transcript part, reduced to what deciding the pending signature needs. */
+export type CheckoutEvent =
+  | { kind: "signing"; key: string; orderId?: string }
+  | { kind: "order"; orderId: string };
+
+/**
+ * The signature still owed, from the transcript in order — or null if none is.
+ *
+ * The transcript is the authority, not the set of keys signed in this tab. That set is
+ * component state while the transcript is restored from sessionStorage, so on its own it
+ * reported every already-signed step as unsigned after a reload: the docked box offered
+ * to sign a payment the transcript itself showed as submitted and confirming.
+ *
+ * So an `order` event for the same order appearing AFTER a `signing` event clears it —
+ * submitting an order, or reading its state, is only reachable once it is signed.
+ * `signedKeys` still carries the moment between signing and the agent's next tool call,
+ * when the transcript holds no such proof yet.
+ */
+export function pendingSignature(
+  events: readonly CheckoutEvent[],
+  signedKeys: ReadonlySet<string>,
+): { key: string; orderId?: string } | null {
+  let pending: { key: string; orderId?: string } | null = null;
+  for (const event of events) {
+    if (event.kind === "signing") {
+      pending = signedKeys.has(event.key) ? null : { key: event.key, orderId: event.orderId };
+      continue;
+    }
+    if (pending?.orderId === event.orderId) pending = null;
+  }
+  return pending;
+}

@@ -4,6 +4,7 @@ import type { MessageStreamEvent, SessionState } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
+import { type CheckoutEvent, pendingSignature } from "@/lib/checkout-step";
 import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
 import { asSigningOutput, signingKey } from "./signing-card";
@@ -172,52 +173,63 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     onNewConversation();
   };
 
-  // The signing step still waiting for a signature — the LAST one the agent produced
-  // that has not been signed. Held in the docked box above the composer so it cannot
-  // scroll out of reach: it is a chat message, and hunting back up the transcript to
-  // press Sign was the original annoyance. It sat at the TOP first, which traded that
-  // annoyance for a worse one — the flow jumped between the bottom, where you read and
-  // type, and the top, where you had to act. Signing it (or a later step arriving)
-  // empties the box.
-  const pending = useMemo(() => {
-    let last: { key: string; output: ReturnType<typeof asSigningOutput> } | null = null;
-    for (const message of agent.data.messages) {
-      for (const part of message.parts) {
-        if (part.type !== "dynamic-tool" || part.state !== "output-available") continue;
-        const signing = asSigningOutput(part.output);
-        if (!signing) continue;
-        const key = signingKey(signing);
-        last = signedKeys.has(key) ? null : { key, output: signing };
-      }
-    }
-    return last;
-  }, [agent.data.messages, signedKeys]);
-
-  // Two things derived from one walk of the transcript:
+  // ONE walk of the transcript, producing everything the docked panel and the transcript
+  // need. It was two walks that had to agree on what counts as "the current checkout";
+  // deriving them together is what keeps them from disagreeing.
+  //
+  //   pending — the signature still owed. The LAST signing step the agent produced that
+  //     has not been signed, and that the conversation has not already moved past.
+  //
+  //     `signedKeys` alone was not enough, and the failure was visible: it is component
+  //     state, while the transcript is restored from sessionStorage, so after a reload
+  //     every already-signed step looked unsigned again — the box offered to sign a
+  //     payment the transcript itself showed as submitted and confirming. So the
+  //     transcript is the authority: an order-card output for the SAME order appearing
+  //     AFTER the signing step means the flow moved on, and the signature is done.
+  //     signedKeys still matters for the moment between signing and the agent's next
+  //     tool call, when the transcript has no such proof yet.
   //
   //   superseded — repeat OrderCards for the same order, by toolCallId. The agent calls
   //     order_status again and again while a payment confirms, and each output rendered
   //     its own card. Keyed on toolCallId, which dynamic-tool parts DO carry — the
-  //     "parts have no stable id" note on the render loop below is about text parts. It
-  //     has to be computed across ALL messages, which no single part can see.
+  //     "parts have no stable id" note on the render loop below is about text parts.
   //
-  //   lastOrderId — the checkout the docked panel is about, when no signature is owed.
-  const { superseded, lastOrderId } = useMemo(() => {
+  //   lastOrderId — the checkout the panel is about, when no signature is owed.
+  const { pending, superseded, lastOrderId } = useMemo(() => {
+    const events: CheckoutEvent[] = [];
+    const outputByKey = new Map<string, ReturnType<typeof asSigningOutput>>();
     const seen = new Map<string, string>();
     const superseded = new Set<string>();
     let lastOrderId: string | undefined;
+
     for (const message of agent.data.messages) {
       for (const part of message.parts) {
         if (part.type !== "dynamic-tool" || part.state !== "output-available") continue;
+
+        const signing = asSigningOutput(part.output);
+        if (signing) {
+          const key = signingKey(signing);
+          outputByKey.set(key, signing);
+          events.push({ kind: "signing", key, orderId: signing.order_id });
+          continue;
+        }
+
         const orderId = orderCardOrderId(part.toolName, part.output);
         if (!orderId) continue;
         lastOrderId = orderId;
         if (seen.has(orderId)) superseded.add(part.toolCallId);
         else seen.set(orderId, part.toolCallId);
+        events.push({ kind: "order", orderId });
       }
     }
-    return { superseded, lastOrderId };
-  }, [agent.data.messages]);
+
+    // The decision itself is pendingSignature (lib/checkout-step), not a copy of it here:
+    // the precedence it encodes is what got this wrong once already, and a duplicate would
+    // be the version no test covers.
+    const owed = pendingSignature(events, signedKeys);
+    const pending = owed ? { key: owed.key, output: outputByKey.get(owed.key) } : null;
+    return { pending, superseded, lastOrderId };
+  }, [agent.data.messages, signedKeys]);
 
   // A signature owed names its own order; otherwise it is the last one mentioned. This
   // is the order the panel goes live on, and the one the transcript stops duplicating.

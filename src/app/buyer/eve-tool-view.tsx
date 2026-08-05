@@ -2,7 +2,7 @@
 
 import type { EveDynamicToolPart } from "eve/react";
 import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
-import { type ToolPart, ToolView } from "./tool-views";
+import { orderCardOrderId, type ToolPart, ToolView } from "./tool-views";
 
 // Bridge between eve's `dynamic-tool` parts and the rich tool views built for
 // the AI SDK variant. The lifecycle states line up one-to-one, so everything
@@ -38,13 +38,18 @@ export function EveToolView({
   /** The order the docked panel is live on. */
   activeOrderId?: string;
 }) {
-  // A repeat status check for an order already on screen. The card kept is the first
-  // one, where the payment happened, and it polls itself — so a second card could only
-  // duplicate it, and its polling. The check is still worth showing as a line.
-  if (part.state === "output-available" && supersededCard) {
+  // A repeat status check for an order already shown. Only for an order OTHER than the
+  // active one, which ToolView renders as a reference to the panel instead — this used
+  // to say "the card above is live", pointing at a card that no longer exists now that
+  // the panel below is the only live surface.
+  if (
+    part.state === "output-available" &&
+    supersededCard &&
+    orderCardOrderId(part.toolName, part.output) !== activeOrderId
+  ) {
     return (
       <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-700">
-        ↑ status checked — the card above is live
+        status checked
       </div>
     );
   }
