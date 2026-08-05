@@ -116,9 +116,23 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
 
+  // Re-arm the follow, because sending is the user saying "I am at the live end of this
+  // conversation" — the clearest signal there is.
+  //
+  // pinnedRef only ever LATCHED off: onScroll turned it false as soon as you scrolled up
+  // past the threshold, and nothing turned it back on. Correct while tokens stream (being
+  // yanked down mid-read is the thing that guard exists to prevent), wrong the moment you
+  // then type something: your own message landed below the fold and the whole reply
+  // streamed off-screen. Every caller here is user-initiated — the composer, retry, the
+  // signing cards' nudge, an approval — so all of them re-arm.
+  const followStream = () => {
+    pinnedRef.current = true;
+  };
+
   // Every turn carries the connected wallet address as ephemeral client
   // context: checkout_begin needs it, and the model must never guess it.
   const sendText = (text: string) => {
+    followStream();
     void agent.send({
       message: text,
       clientContext: wallet ? { buyer_wallet_address: wallet.address } : undefined,
@@ -133,6 +147,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   };
 
   const respond = (requestId: string, optionId: string) => {
+    followStream();
     void agent.send({ inputResponses: [{ requestId, optionId }] });
   };
 
