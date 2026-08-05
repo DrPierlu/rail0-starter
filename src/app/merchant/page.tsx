@@ -80,8 +80,17 @@ export default function Merchant() {
         method: "POST",
       });
       const body = await res.json();
-      if (!res.ok) setError(body.error ?? `${action} failed`);
-      await refresh();
+      if (res.ok) {
+        await refresh();
+      } else {
+        // Set the message and DON'T refresh. refresh()'s success branch calls
+        // setError(null), so refreshing after a failed action wiped the very message
+        // that explains why it failed — a 409 or 422 from capture/void was gone
+        // within a render. The list is a second behind until the 4s poll catches up,
+        // which is the right trade for a merchant who needs to read why the action
+        // they just took on real escrowed funds did not happen.
+        setError(body.error ?? `${action} failed`);
+      }
     } catch {
       // The fetch itself failing (the server down mid-action, a non-JSON body) had
       // no handler: the promise onClick returned rejected unhandled, so nothing was
