@@ -14,6 +14,13 @@ export interface SignLoginOutput {
   total: string;
   token: string;
   siwe_message: string;
+  /**
+   * The checkout's deposit secret, minted server-side at checkout_begin. Presented
+   * on the POST below: the order id is not secret (it is 8 hex characters and it
+   * travels through the chat), so without this anyone who guessed one could
+   * overwrite this buyer's stashed signatures and kill the checkout.
+   */
+  deposit_nonce: string;
 }
 
 export interface SignPaymentOutput {
@@ -21,6 +28,8 @@ export interface SignPaymentOutput {
   order_id: string;
   rail0_id: string;
   signing_payload: SigningPayload;
+  /** Same nonce as step 1's — one per checkout. */
+  deposit_nonce: string;
 }
 
 export type SigningOutput = SignLoginOutput | SignPaymentOutput;
@@ -86,7 +95,11 @@ export function SigningCard({
       const res = await fetch(`/api/checkout/${output.order_id}/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: isLogin ? "siwe" : "eip3009", signature }),
+        body: JSON.stringify({
+          kind: isLogin ? "siwe" : "eip3009",
+          signature,
+          nonce: output.deposit_nonce,
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };

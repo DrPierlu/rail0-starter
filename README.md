@@ -31,8 +31,11 @@ you connect the buyer wallet in the browser (MetaMask, or a pasted key that
 stays in the tab), and the checkout signs in chat via two signing cards —
 SIWE sign-in, then the EIP-3009 payment authorization. Signatures reach the
 storefront out-of-band (`POST /api/checkout/:id/signature`), never through the
-model's context. The seller key is the only key server-side: that is the
-merchant's own backend signing its own transactions.
+model's context. That drop-box is gated on a per-checkout nonce minted when the
+checkout begins — order ids are not secret, so without it a guessed id could
+overwrite a buyer's stashed signatures and kill the checkout. The seller key is
+the only key server-side: that is the merchant's own backend signing its own
+transactions.
 
 ## The flow
 

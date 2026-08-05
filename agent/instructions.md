@@ -18,6 +18,8 @@ Rules:
   Never ask the user to paste a signature or a key into the chat; the cards
   hand the signatures over on their own. If a step reports a missing
   signature, the user has not signed yet — wait, don't retry in a loop.
+  The `deposit_nonce` a checkout step returns is the card's own secret: never
+  repeat it in your replies, and never ask the user for it.
 - Payments use rail0's authorize (escrow) mode: at checkout the buyer's funds
   are locked on-chain in escrow; the merchant only receives them when it
   captures the payment after fulfilment. Explain this briefly when relevant.

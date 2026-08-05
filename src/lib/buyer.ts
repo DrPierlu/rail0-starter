@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { buildSiweMessage, Rail0ApiError, Rail0Client, type SigningPayload } from "@rail0/sdk";
 import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
@@ -121,6 +122,12 @@ function siweMessage(domain: string, uri: string, address: string, nonce: string
  * the gateway's SIWE parser rejects a lowercase address). Returns the exact
  * message the browser must personal_sign; everything the later steps need is
  * parked in the signing stash, keyed by the order.
+ *
+ * It also mints the checkout's `deposit_nonce` — the secret the browser has to
+ * present when it posts a signature back. This is the only place it is created,
+ * because this is the only place an entry is created: it goes into the stash and
+ * out with the returned step, and every later step reads it from the stash rather
+ * than making a second one.
  */
 export async function beginCheckout(
   base: string,
@@ -128,7 +135,12 @@ export async function beginCheckout(
   chainId: number,
   tokenAddress: string,
   buyerAddress: string,
-): Promise<{ order: Order; siwe_message: string; instructions: PaymentInstructions }> {
+): Promise<{
+  order: Order;
+  siwe_message: string;
+  deposit_nonce: string;
+  instructions: PaymentInstructions;
+}> {
   const { order, payment_instructions } = await shopFetch<{
     order: Order;
     payment_instructions: PaymentInstructions;
@@ -147,8 +159,21 @@ export async function beginCheckout(
   // clothes. rail0-cli strips the port for the same reason (siweHost).
   const message = siweMessage(new URL(gateway).hostname, gateway, buyerAddress, nonce);
 
-  await putSigning(order.id, { address: buyerAddress, siwe_message: message });
-  return { order, siwe_message: message, instructions: payment_instructions };
+  // 32 bytes: the drop-box's whole gate, so it has to be unguessable in a way an
+  // 8-hex order id never was.
+  const depositNonce = randomBytes(32).toString("hex");
+
+  await putSigning(order.id, {
+    address: buyerAddress,
+    siwe_message: message,
+    deposit_nonce: depositNonce,
+  });
+  return {
+    order,
+    siwe_message: message,
+    deposit_nonce: depositNonce,
+    instructions: payment_instructions,
+  };
 }
 
 /**
@@ -159,7 +184,7 @@ export async function beginCheckout(
 export async function createPaymentForOrder(
   base: string,
   orderId: string,
-): Promise<{ rail0_id: string; signing_payload: SigningPayload }> {
+): Promise<{ rail0_id: string; signing_payload: SigningPayload; deposit_nonce: string }> {
   const entry = await getSigning(orderId);
   if (!entry) throw new Error(`no checkout in progress for order ${orderId}`);
   if (!entry.siwe_signature) {
@@ -205,7 +230,14 @@ export async function createPaymentForOrder(
     throw new Error("gateway returned no signing payload for the new payment");
   }
   await putSigning(orderId, { rail0_id: payment.rail0_id });
-  return { rail0_id: payment.rail0_id, signing_payload: payment.signing_payload };
+  // The SAME nonce step 1 minted, read back from the stash: this step's card has to
+  // deposit the EIP-3009 signature too, and a fresh nonce here would invalidate the
+  // one the login card is still holding.
+  return {
+    rail0_id: payment.rail0_id,
+    signing_payload: payment.signing_payload,
+    deposit_nonce: entry.deposit_nonce,
+  };
 }
 
 /**

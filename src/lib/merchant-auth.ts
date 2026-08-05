@@ -13,7 +13,8 @@ import { ShopError } from "./shop";
  * 8-hex order ids needed to name one. The buyer's own routes are deliberately
  * NOT gated (the browser and the agent are the other deployable, with no
  * merchant credential): the buyer polls its single order by id, and the
- * checkout/signature routes stay open.
+ * checkout/signature route carries no merchant token — it is gated on the
+ * per-checkout deposit nonce minted at checkout_begin instead.
  *
  * MERCHANT_TOKEN, never NEXT_PUBLIC_*: a NEXT_PUBLIC_ variable is inlined into
  * the client bundle, which would ship the credential to every visitor.
