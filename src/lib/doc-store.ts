@@ -24,7 +24,43 @@ import path from "node:path";
 export interface DocStore<T> {
   read(): Promise<T>;
   write(data: T): Promise<void>;
+  /**
+   * Serialized read-modify-write. `fn` receives the current document and mutates it
+   * in place; its return value is passed through, and the document is written once
+   * `fn` resolves. Call the second argument, `skip()`, to leave the stored document
+   * untouched — separate from the return value, so a callback can both report
+   * something and decline to write.
+   *
+   * Every read-then-write on this store must go through here. `read()` + mutate +
+   * `write()` at the call site is a lost-update waiting to happen: the whole
+   * document is rewritten, so two overlapping callers each write what they read,
+   * and the one that finishes last erases the other's change entirely.
+   *
+   * That is not hypothetical here — `GET /api/shop/orders` refreshes every order
+   * with `Promise.allSettled(stored.map(refreshOrder))`, so N of these overlap on
+   * every poll, and the merchant dashboard polls every 4s while each buyer card
+   * polls every 3s. The casualty was the checkout write-ahead: a refresh that read
+   * before it and wrote after it dropped the order's `rail0_id` and `authorizing`
+   * state, and nothing could heal that — the refresh path returns early without a
+   * rail0_id, and re-attaching fails because the payment is no longer `signed`.
+   * Funds escrowed, order stuck at awaiting_payment: exactly the gap the
+   * write-ahead exists to close.
+   *
+   * SCOPE, stated plainly: this serializes callers **within one process**, which is
+   * what the polling above produces. It does NOT make the store safe across
+   * instances (several Vercel lambdas, or the Next app and the eve agent service
+   * writing the same Redis key) — that needs a real compare-and-set, which the
+   * single-command REST driver cannot express. Cross-instance writers still race.
+   */
+  mutate<R>(fn: (data: T, skip: () => void) => R | Promise<R>): Promise<R>;
 }
+
+/**
+ * What a storage backend has to implement: the plain document read/write pair.
+ * `mutate` is not part of it — it is composed once, on top, so the serialization
+ * cannot differ between drivers or be forgotten by a new one.
+ */
+type Driver<T> = Pick<DocStore<T>, "read" | "write">;
 
 function redisCredentials(): { url: string; token: string } | null {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
@@ -72,7 +108,7 @@ export function makeDocStore<T>(opts: {
   const dataDir = () => process.env.STARTER_DATA_DIR ?? path.join(process.cwd(), ".data");
   const dataFile = () => path.join(dataDir(), opts.file);
 
-  const fileDriver: DocStore<T> = {
+  const fileDriver: Driver<T> = {
     async read() {
       try {
         return JSON.parse(readFileSync(dataFile(), "utf8")) as T;
@@ -89,7 +125,7 @@ export function makeDocStore<T>(opts: {
     },
   };
 
-  const redisDriver: DocStore<T> = {
+  const redisDriver: Driver<T> = {
     async read() {
       const raw = (await redis(["GET", opts.redisKey])) as string | null;
       return raw ? (JSON.parse(raw) as T) : opts.empty();
@@ -101,8 +137,32 @@ export function makeDocStore<T>(opts: {
 
   // The driver is picked per call, not at module load: env-driven, and tests
   // flip it by (un)setting the credentials.
+  const driver = () => (redisCredentials() ? redisDriver : fileDriver);
+
+  // One promise chain per store, so overlapping mutate() calls run strictly one
+  // after another instead of interleaving their read and write halves. A tail that
+  // swallows rejections keeps the chain usable after a failed mutation — otherwise
+  // one error would wedge every later write on this store.
+  let tail: Promise<unknown> = Promise.resolve();
+
   return {
-    read: () => (redisCredentials() ? redisDriver : fileDriver).read(),
-    write: (data) => (redisCredentials() ? redisDriver : fileDriver).write(data),
+    read: () => driver().read(),
+    write: (data) => driver().write(data),
+    mutate<R>(fn: (data: T, skip: () => void) => R | Promise<R>): Promise<R> {
+      const run = tail.then(async () => {
+        const active = driver();
+        const data = await active.read();
+        let shouldWrite = true;
+        const result = await fn(data, () => {
+          shouldWrite = false;
+        });
+        // A throw from fn propagates before this line, so a failed mutation leaves
+        // the stored document exactly as it was.
+        if (shouldWrite) await active.write(data);
+        return result;
+      });
+      tail = run.catch(() => {});
+      return run;
+    },
   };
 }

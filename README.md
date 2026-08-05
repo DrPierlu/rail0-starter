@@ -253,8 +253,14 @@ Manual equivalent, and what to set up once:
 ## Notes for a real integration
 
 - **Order store**: a deliberately tiny single-user document store
-  (`.data/store.json` locally, one Redis key on Vercel) with no locking —
-  swap `src/lib/store.ts` for a real database.
+  (`.data/store.json` locally, one Redis key on Vercel). Read-modify-write goes
+  through `DocStore.mutate`, which serializes overlapping callers **inside one
+  process** — enough for the order-list refresh, which updates every order at
+  once on each poll, and which used to silently drop the checkout's write-ahead.
+  It is NOT safe across instances (several Vercel lambdas, or the Next app and
+  the agent service on the same Redis key): the whole document is still
+  rewritten, with no compare-and-set. Swap `src/lib/store.ts` for a real
+  database before more than one writer exists.
 - **The seller key in an env var** is demo-grade: in production it belongs in
   a proper secret store or signer. The buyer side already models the real
   thing — the key stays in the buyer's own wallet, and the gateway never

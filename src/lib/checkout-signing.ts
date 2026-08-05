@@ -71,14 +71,32 @@ const store = makeDocStore<SigningData>({
 const expired = (entry: SigningEntry) =>
   Math.floor(Date.now() / 1000) - (entry.created_at ?? 0) > EXPIRY_SECS;
 
+/** Drop expired entries in place; true when anything was removed. */
+function purgeExpired(data: SigningData): boolean {
+  let removed = false;
+  for (const [orderId, entry] of Object.entries(data)) {
+    if (expired(entry)) {
+      delete data[orderId];
+      removed = true;
+    }
+  }
+  return removed;
+}
+
 // Read with lazy expiry: expired entries are dropped, and the purge is
 // persisted only when it removed something (no write amplification on the
 // common empty/fresh case).
+//
+// Through mutate() like every other access to this store: ONE document holds every
+// in-flight checkout, so a read-then-write here rewrote all of them from a stale
+// copy. Two buyers signing at the same time meant the second write erased the
+// first's entry, and that buyer's checkout then reported "the signature has not
+// arrived yet" forever.
 async function read(): Promise<SigningData> {
-  const data = await store.read();
-  const live = Object.fromEntries(Object.entries(data).filter(([, entry]) => !expired(entry)));
-  if (Object.keys(live).length !== Object.keys(data).length) await store.write(live);
-  return live;
+  return store.mutate((data, skip) => {
+    if (!purgeExpired(data)) skip();
+    return data;
+  });
 }
 
 export async function getSigning(orderId: string): Promise<SigningEntry | undefined> {
@@ -102,23 +120,28 @@ export async function putSigning(
   orderId: string,
   patch: Partial<SigningEntry>,
 ): Promise<SigningEntry | undefined> {
-  const data = await read();
-  const existing = data[orderId];
-  if (!existing && (!patch.address || !patch.siwe_message)) return undefined;
-  const entry = {
-    ...(existing ?? {}),
-    ...patch,
-    // The TTL clock is the FIRST write's, whatever a later patch carries.
-    created_at: existing?.created_at ?? Math.floor(Date.now() / 1000),
-  } as SigningEntry;
-  data[orderId] = entry;
-  await store.write(data);
-  return entry;
+  return store.mutate((data, skip) => {
+    purgeExpired(data);
+    const existing = data[orderId];
+    if (!existing && (!patch.address || !patch.siwe_message)) {
+      skip();
+      return undefined;
+    }
+    const entry = {
+      ...(existing ?? {}),
+      ...patch,
+      // The TTL clock is the FIRST write's, whatever a later patch carries.
+      created_at: existing?.created_at ?? Math.floor(Date.now() / 1000),
+    } as SigningEntry;
+    data[orderId] = entry;
+    return entry;
+  });
 }
 
 /** Drop the entry once the checkout settles or is abandoned — it holds a JWT. */
 export async function clearSigning(orderId: string): Promise<void> {
-  const data = await read();
-  delete data[orderId];
-  await store.write(data);
+  await store.mutate((data) => {
+    purgeExpired(data);
+    delete data[orderId];
+  });
 }

@@ -86,7 +86,6 @@ export async function createOrder(
   totalBase: string,
   token: OrderToken,
 ): Promise<Order> {
-  const data = await store.read();
   const now = new Date().toISOString();
   const order: Order = {
     id: randomUUID().slice(0, 8),
@@ -98,8 +97,11 @@ export async function createOrder(
     created_at: now,
     updated_at: now,
   };
-  data.orders.unshift(order);
-  await store.write(data);
+  // Through mutate(), not read()+write(): two orders created at once each wrote
+  // the whole document, so the second erased the first.
+  await store.mutate((data) => {
+    data.orders.unshift(order);
+  });
   return order;
 }
 
@@ -115,10 +117,20 @@ export async function updateOrder(
   id: string,
   patch: Partial<Omit<Order, "id" | "created_at">>,
 ): Promise<Order | undefined> {
-  const data = await store.read();
-  const order = data.orders.find((o) => o.id === id);
-  if (!order) return undefined;
-  Object.assign(order, patch, { updated_at: new Date().toISOString() });
-  await store.write(data);
-  return order;
+  // Serialized: the order list is refreshed with one updateOrder per order
+  // concurrently (see GET /api/shop/orders), and as a read-then-write each of those
+  // rewrote the entire document from its own stale copy — dropping whatever landed
+  // in between, including the checkout write-ahead. See DocStore.mutate.
+  return store.mutate((data, skip) => {
+    const order = data.orders.find((o) => o.id === id);
+    // No such order — skip the write rather than rewriting the document unchanged,
+    // which on the Redis driver is a pointless round trip on every poll of an id
+    // that no longer exists.
+    if (!order) {
+      skip();
+      return undefined;
+    }
+    Object.assign(order, patch, { updated_at: new Date().toISOString() });
+    return order;
+  });
 }
