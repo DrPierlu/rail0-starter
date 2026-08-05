@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { makeDocStore } from "@/lib/doc-store";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DocStoreError, makeDocStore } from "@/lib/doc-store";
 
 // The bug these pin: the eve agent service is a separate process whose cwd is a
 // per-build snapshot (.eve/dev-runtime/snapshots/<id>/source). With the path resolved
@@ -70,6 +70,94 @@ describe("makeDocStore file driver", () => {
   it("reads an empty document when nothing is stored yet", async () => {
     process.env.STARTER_DATA_DIR = mkdtempSync(path.join(tmpdir(), "starter-data-"));
     expect(await store().read()).toEqual({});
+  });
+});
+
+// ── A document that exists and cannot be read ────────────────────────
+//
+// The bug these pin: read() caught EVERY error and answered empty(). A truncated
+// JSON (or EACCES) therefore looked exactly like a fresh install — and since the
+// caller is mutate(), which writes the document straight back, one unreadable read
+// replaced every stored order with `{}`. Silent, total data loss. Only ENOENT is
+// absence now; anything else fails loudly and leaves the bad copy in place.
+describe("makeDocStore file driver on an unreadable document", () => {
+  const withCorruptFile = (content: string) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "starter-data-"));
+    process.env.STARTER_DATA_DIR = dir;
+    const file = path.join(dir, "probe.json");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, content);
+    return file;
+  };
+
+  it("throws instead of answering an empty document", async () => {
+    const file = withCorruptFile('{ "a": "1"');
+    await expect(store().read()).rejects.toThrow(DocStoreError);
+    // The message has to be actionable: it names the file, since moving it aside is
+    // the deliberate way to start over.
+    await expect(store().read()).rejects.toThrow(file);
+  });
+
+  it("leaves the file untouched, so a mutate cannot erase it", async () => {
+    const file = withCorruptFile('{ "keep": "yes"');
+
+    await expect(
+      store().mutate((data) => {
+        data.added = "no";
+      }),
+    ).rejects.toThrow(DocStoreError);
+
+    expect(readFileSync(file, "utf8")).toBe('{ "keep": "yes"');
+  });
+
+  // An empty file is a half-finished write, not an empty document — the same rule.
+  it("treats a truncated (zero-byte) document as unreadable, not empty", async () => {
+    withCorruptFile("");
+    await expect(store().read()).rejects.toThrow(DocStoreError);
+  });
+});
+
+// ── The same rule on the Redis driver ────────────────────────────────
+//
+// It had no catch at all, so one corrupt value 500'd every endpoint until the key
+// was deleted by hand. It still refuses — deliberately, and for the file driver's
+// reason: swallowed as empty(), the corrupt value would be written back over the
+// real document. A key that is not set yet stays the legitimate empty answer.
+describe("makeDocStore redis driver", () => {
+  const originalUrl = process.env.KV_REST_API_URL;
+  const originalToken = process.env.KV_REST_API_TOKEN;
+
+  // One canned GET reply, as Upstash's REST shape: { result: <value|null> }.
+  const withStoredValue = (result: unknown) => {
+    process.env.KV_REST_API_URL = "https://redis.example";
+    process.env.KV_REST_API_TOKEN = "t0ken";
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ result })));
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (originalUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = originalToken;
+  });
+
+  it("reads an empty document when the key is not set yet", async () => {
+    withStoredValue(null);
+    expect(await store().read()).toEqual({});
+  });
+
+  it("throws on a stored value that is not valid JSON, naming the key", async () => {
+    withStoredValue('{ "a": "1"');
+    await expect(store().read()).rejects.toThrow(DocStoreError);
+    await expect(store().read()).rejects.toThrow("probe");
+  });
+
+  // An empty string is a value, not an absent key — the zero-byte file of the other
+  // driver, and refused for the same reason.
+  it("throws on an empty stored value", async () => {
+    withStoredValue("");
+    await expect(store().read()).rejects.toThrow(DocStoreError);
   });
 });
 

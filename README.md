@@ -260,7 +260,10 @@ Manual equivalent, and what to set up once:
   It is NOT safe across instances (several Vercel lambdas, or the Next app and
   the agent service on the same Redis key): the whole document is still
   rewritten, with no compare-and-set. Swap `src/lib/store.ts` for a real
-  database before more than one writer exists.
+  database before more than one writer exists. A document that exists and cannot
+  be read (truncated JSON, bad permissions, a corrupt Redis value) is a loud 500
+  naming the file or key — never an empty store, because `mutate` writes what it
+  read straight back and would erase it.
 - **The seller key in an env var** is demo-grade: in production it belongs in
   a proper secret store or signer. The buyer side already models the real
   thing — the key stays in the buyer's own wallet, and the gateway never

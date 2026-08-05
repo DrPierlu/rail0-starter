@@ -62,6 +62,17 @@ export interface DocStore<T> {
  */
 type Driver<T> = Pick<DocStore<T>, "read" | "write">;
 
+/**
+ * The stored document exists and cannot be read.
+ *
+ * Its own class so it is never confused with the legitimately-empty case (nothing
+ * stored yet, which is `empty()`), and so a reader can tell "the store is broken"
+ * from "the request was wrong". errorResponse needs no branch for it: an Error it
+ * does not recognise becomes a 500 with the message verbatim, which is exactly
+ * what a corrupt store deserves — the message names the file or key to fix.
+ */
+export class DocStoreError extends Error {}
+
 function redisCredentials(): { url: string; token: string } | null {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -110,10 +121,25 @@ export function makeDocStore<T>(opts: {
 
   const fileDriver: Driver<T> = {
     async read() {
+      const file = dataFile();
       try {
-        return JSON.parse(readFileSync(dataFile(), "utf8")) as T;
-      } catch {
-        return opts.empty();
+        return JSON.parse(readFileSync(file, "utf8")) as T;
+      } catch (error) {
+        // ENOENT is the ONLY absence: nothing has been written yet, so an empty
+        // document is the right answer and a fresh install must not error.
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return opts.empty();
+        // Anything else means the document IS there and could not be read — a
+        // truncated or hand-edited JSON, EACCES. Returning empty() here (which is
+        // what a bare `catch` did) was silent, total data loss: the caller is
+        // mutate(), which writes the document straight back, so ONE unreadable read
+        // replaced every stored order with `{}`. Failing loudly leaves the file
+        // untouched and names it, so the bad copy can still be inspected or moved
+        // aside — a 500 on the next request is recoverable, an erased store is not.
+        throw new DocStoreError(
+          `store file ${file} exists but could not be read (${(error as Error).message}) — ` +
+            "refusing to treat it as empty, because the next write would erase it. " +
+            "Fix the file, or move it aside to start from an empty store.",
+        );
       }
     },
     async write(data) {
@@ -127,8 +153,26 @@ export function makeDocStore<T>(opts: {
 
   const redisDriver: Driver<T> = {
     async read() {
-      const raw = (await redis(["GET", opts.redisKey])) as string | null;
-      return raw ? (JSON.parse(raw) as T) : opts.empty();
+      const raw = (await redis(["GET", opts.redisKey])) as string | null | undefined;
+      // An UNSET key is the Redis equivalent of ENOENT — legitimately empty, and the
+      // answer on every fresh deployment. That and nothing else: an empty string is a
+      // value, i.e. a half-written document, and falls into the corrupt branch below
+      // exactly as a zero-byte file does.
+      if (raw === null || raw === undefined) return opts.empty();
+      try {
+        return JSON.parse(raw) as T;
+      } catch (error) {
+        // Same rule as the file driver, and here the loud failure is also the SAFE
+        // one: a corrupt value swallowed as empty() would be written back over the
+        // real document on the next mutate(). It stays put instead, which is why the
+        // message names the key — deleting it is the deliberate way to start over.
+        throw new DocStoreError(
+          `store redis key ${opts.redisKey} holds a value that is not valid JSON ` +
+            `(${(error as Error).message}) — refusing to treat it as empty, because the ` +
+            "next write would erase it. Inspect the value, or DEL the key to start from " +
+            "an empty store.",
+        );
+      }
     },
     async write(data) {
       await redis(["SET", opts.redisKey, JSON.stringify(data)]);
