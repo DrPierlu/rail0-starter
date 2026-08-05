@@ -1,7 +1,7 @@
-import { buildSiweMessage, Rail0Client, type SigningPayload } from "@rail0/sdk";
+import { buildSiweMessage, Rail0ApiError, Rail0Client, type SigningPayload } from "@rail0/sdk";
 import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
-import { getOrder, type Order } from "./store";
+import type { Order } from "./store";
 
 // Buyer-side payment flow — KEYLESS on this branch: the server never holds the
 // buyer's private key. Every buyer signature (the SIWE login and the EIP-3009
@@ -209,10 +209,34 @@ export async function createPaymentForOrder(
 }
 
 /**
+ * The gateway refuses a second payer signature with 422 already_signed even when
+ * the bytes are identical, so on a retry that code means "this step already ran",
+ * not a failure. Only this one code: every other 422 (a signature that does not
+ * recover to the payer, a payment past the point where a signature counts) is a
+ * genuine error that must still surface.
+ *
+ * Exported for the unit test: the retry it makes safe cannot be reproduced
+ * without a gateway, and `error` (not `code`, not `message`) being the field the
+ * SDK exposes this on is exactly the detail worth pinning.
+ */
+export function isAlreadySigned(error: unknown): boolean {
+  return error instanceof Rail0ApiError && error.error === "already_signed";
+}
+
+/**
  * Checkout step 3 — attach the browser's EIP-3009 signature and hand the
  * signed payment to the storefront, which verifies it and broadcasts the
  * authorize. Tolerates a replay: if the order already moved past
  * awaiting_payment, it just reports the current state.
+ *
+ * IDEMPOTENT, like step 2's auth-token reuse, and for a worse failure. `sign`
+ * used to run unconditionally: if it succeeded and the attach POST after it did
+ * not (a network blip, the dev server restarting, the agent retrying the step),
+ * the order stayed `awaiting_payment` — so the early return below never fired —
+ * and every retry re-signed, took 422 already_signed, and died BEFORE the
+ * attach. The payment was signed, the order was stuck for good, and no retry
+ * could ever move it. So the payment's own status decides whether to sign, and
+ * an already_signed race is treated as "already signed, carry on".
  */
 export async function submitSignedPayment(
   base: string,
@@ -224,15 +248,34 @@ export async function submitSignedPayment(
     throw new Error("the payment signature has not arrived yet — ask the user to sign first");
   }
 
-  const current = await getOrder(orderId);
-  if (current && current.state !== "awaiting_payment") {
+  // Over HTTP, not the merchant's store directly: the storefront is a separate
+  // deployable, so a local read here saw an empty store (and therefore no order)
+  // in exactly the split this file's boundary exists for. The GET also refreshes
+  // the order from the gateway, so what it answers is live.
+  const current = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}`).then(
+    (r) => r.order,
+  );
+  if (current.state !== "awaiting_payment") {
     return { order: current, rail0_id: entry.rail0_id };
   }
 
   const client = bareClient();
   if (!entry.auth_token) throw new Error("buyer session expired — restart the checkout");
   client.setAuthToken(entry.auth_token);
-  await client.payments.sign(entry.rail0_id, { signature: entry.eip3009_signature });
+
+  // The gateway is the authority on whether the signature landed — not the local
+  // stash, which the split deployment above makes unreliable. `unsigned` is the
+  // only status from which signing is still owed; anything later (signed,
+  // authorized, …) means it happened, and the attach is what is missing.
+  const payment = await client.payments.get(entry.rail0_id);
+  if (payment.status === "unsigned") {
+    try {
+      await client.payments.sign(entry.rail0_id, { signature: entry.eip3009_signature });
+    } catch (error) {
+      // A concurrent retry can sign between the read above and this call.
+      if (!isAlreadySigned(error)) throw error;
+    }
+  }
 
   const attached = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}/payment`, {
     method: "POST",
