@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { always } from "eve/tools/approval";
 import { z } from "zod";
 import { beginCheckout } from "../../src/lib/buyer";
 import { shopBase } from "../lib/base";
@@ -6,6 +7,24 @@ import { getCart } from "../lib/cart";
 import { rememberOrder } from "../lib/orders";
 
 export default defineTool({
+  // The shopper approves the checkout before it starts. Until now the rule lived only in
+  // instructions ("ALWAYS ask the user to confirm"), which the model may decline to
+  // follow — evals/checkout/confirms-before-spending.eval.ts says so in as many words.
+  // The docs are explicit that an omitted `approval` means calls may execute with no
+  // human at all, and that financial and external side-effecting actions must not be left
+  // there (docs/tools/human-in-the-loop.md). The client half was already built: the buyer
+  // UI renders `approval-requested` parts (src/app/buyer/eve-tool-view.tsx).
+  //
+  // THIS step and not the later ones. The wallet already gates the MONEY — nothing moves
+  // without the shopper's SIWE and EIP-3009 signatures, so an approval on
+  // checkout_submit would only re-ask about a payment they had just signed. What no
+  // signature covers is INTENT: this call creates the merchant-side order and mints the
+  // deposit nonce before any wallet prompt appears. The signature says "I authorise this
+  // payment"; the approval says "I asked for this order".
+  //
+  // always(), never once(): once() auto-allows every later checkout in the session, which
+  // on spending is exactly the wrong default.
+  approval: always(),
   description:
     "Start the checkout for the current cart: creates the order and the sign-in " +
     "challenge. The user's wallet address comes from the client context. After " +
