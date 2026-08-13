@@ -1,6 +1,6 @@
 "use client";
 
-import type { MessageStreamEvent, SessionState } from "eve/client";
+import type { ClientSessionState, MessageStreamEvent } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -26,7 +26,7 @@ const TRANSCRIPT_KEY = "rail0-starter:eve-chat";
 
 interface SavedChat {
   events?: readonly MessageStreamEvent[];
-  session?: SessionState;
+  session?: ClientSessionState;
 }
 
 function loadSaved(): SavedChat {
@@ -135,8 +135,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   // context: checkout_begin needs it, and the model must never guess it.
   const sendText = (text: string) => {
     followStream();
-    void agent.send({
-      message: text,
+    void agent.send(text, {
       clientContext: wallet ? { buyer_wallet_address: wallet.address } : undefined,
     });
   };
@@ -150,9 +149,14 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
 
   // An answer is either a chosen option or typed text — InputResponse carries both as
   // optional, and a question with allowFreeform (or display: "text") has no option to pick.
+  //
+  // `respond`, not `send`: eve 0.31 split answering a pending request out of the message
+  // path, and the two are now mutually exclusive. Sending `{ inputResponses }` as a
+  // message no longer type-checks, and an approval answered that way would have read as
+  // ordinary text.
   const respond = (requestId: string, answer: { optionId?: string; text?: string }) => {
     followStream();
-    void agent.send({ inputResponses: [{ requestId, ...answer }] });
+    void agent.respond([{ requestId, ...answer }]);
   };
 
   // Re-send the text of the last user message after a failed turn.
