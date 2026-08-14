@@ -59,7 +59,12 @@ pnpm test >/dev/null 2>&1 || problem "pnpm test failed"
 # These live in the Vercel project, not in .env.local. Listed rather than checked when
 # the vercel CLI is absent: guessing they are set is how a deploy looks fine and the
 # first checkout does not.
-required=(ANTHROPIC_API_KEY SELLER_PRIVATE_KEY GATEWAY_URL MERCHANT_TOKEN)
+# BUYER_TOKEN belongs here even though `bin/dev` neither sets nor wants it: the agent
+# channel is open on a local dev server (eve's localDev) and fail-closed everywhere
+# else, so this variable is invisible until the moment it is deployed — and its absence
+# then costs a chat that answers 401 to every message, with nothing upstream having
+# complained. That asymmetry is exactly what a deploy preflight is for.
+required=(ANTHROPIC_API_KEY SELLER_PRIVATE_KEY GATEWAY_URL MERCHANT_TOKEN BUYER_TOKEN)
 if command -v vercel >/dev/null 2>&1; then
   echo "==> reading the project's production environment ..."
   env_list=$(vercel env ls production 2>/dev/null || true)
