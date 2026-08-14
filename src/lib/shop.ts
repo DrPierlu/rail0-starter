@@ -1,5 +1,7 @@
 import { formatAmount, type PaymentDetail, signTransaction } from "@rail0/sdk";
 import { env } from "./env";
+import { unpackLines } from "./order-view";
+import { coversCatalogPrice } from "./quote";
 import { addressFor, clientFor } from "./rail0";
 import { getOrder, type Order, type OrderState, updateOrder } from "./store";
 
@@ -97,6 +99,18 @@ export async function attachPaymentAndAuthorize(orderId: string, rail0Id: string
   }
   if (payment.mode !== "authorize") {
     throw new ShopError(422, "payment mode must be authorize (escrow)");
+  }
+  // The lines the payment CLAIMS to pay for, priced against the catalog.
+  //
+  // Today this is belt and braces: the amount was already checked against the stored
+  // order above. It is here because the stored order is going away — an order is
+  // becoming the payment itself — and then this is the only thing standing between
+  // "the metadata says ten shirts" and a fulfilled order, because that metadata is
+  // written by the payer. Landing it now means the control is live and tested before
+  // the check it backs up disappears.
+  const claimed = unpackLines(payment.metadata);
+  if (claimed.length > 0 && !coversCatalogPrice(claimed, payment.amount, order.token.decimals)) {
+    throw new ShopError(422, "payment does not cover the catalog price of the items it claims");
   }
   if (payment.status !== "signed") {
     // On a retry a non-signed status means the earlier broadcast DID land —

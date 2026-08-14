@@ -3,6 +3,7 @@ import { buildSiweMessage, Rail0ApiError, Rail0Client, type SigningPayload } fro
 import { agentWalletAddress, signAsAgent } from "./buyer-signer";
 import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
+import { packLines } from "./order-view";
 import type { Order } from "./store";
 
 // Buyer-side payment flow, in two shapes over the SAME three steps.
@@ -229,7 +230,14 @@ export async function createPaymentForOrder(
     payee: (await shopFetch<{ merchant: { address: string } }>(base, "/api/shop/products")).merchant
       .address,
     description: `rail0-starter order ${orderId}`,
-    metadata: { order_id: orderId },
+    // The ORDER travels with the payment, not just a pointer to it. The gateway is
+    // becoming the record — an order is a payment — so the lines have to be somewhere
+    // the gateway keeps, and `metadata` is that place (jsonb, 4096 bytes). The order
+    // id stays alongside for as long as a local order still exists.
+    //
+    // It is written by the PAYER, so it is a claim rather than a merchant record:
+    // shop.ts prices it against the catalog before authorizing (coversCatalogPrice).
+    metadata: { order_id: orderId, ...packLines(order.lines) },
   });
 
   if (!payment.signing_payload) {
