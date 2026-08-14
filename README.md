@@ -26,16 +26,21 @@ Both sides use the [`@rail0/sdk`](https://github.com/commercelayer/rail0-ts)
 TypeScript SDK — no CLI or binary dependency, so the template deploys anywhere
 Next.js does.
 
-**The buyer's key never touches the server.** There is no buyer key in env:
-you connect the buyer wallet in the browser (MetaMask, or a pasted key that
-stays in the tab), and the checkout signs in chat via two signing cards —
-SIWE sign-in, then the EIP-3009 payment authorization. Signatures reach the
-storefront out-of-band (`POST /api/checkout/:id/signature`), never through the
-model's context. That drop-box is gated on a per-checkout nonce minted when the
-checkout begins — order ids are not secret, so without it a guessed id could
-overwrite a buyer's stashed signatures and kill the checkout. The seller key is
-the only key server-side: that is the merchant's own backend signing its own
-transactions.
+**A private key is never typed into the app.** The buyer connects MetaMask, and
+the checkout signs in chat via two signing cards — SIWE sign-in, then the
+EIP-3009 payment authorization — so the key stays in the extension and the page
+never sees it. Signatures reach the storefront out-of-band (`POST
+/api/checkout/:id/signature`), never through the model's context. That drop-box
+is gated on a per-checkout nonce minted when the checkout begins — order ids are
+not secret, so without it a guessed id could overwrite a buyer's stashed
+signatures and kill the checkout.
+
+For a demo on a machine with no extension, set `BUYER_PRIVATE_KEY` in
+`.env.local`: the key stays on the server, the browser asks `/api/buyer/signer`
+for a signature and never receives the key itself, and the route refuses to
+exist outside `next dev` — so a deployed instance always uses MetaMask. The
+seller key is server-side by design: that is the merchant's own backend signing
+its own transactions.
 
 ## The flow
 
@@ -62,10 +67,11 @@ a rail0 gateway to talk to, and an Anthropic API key.
    `http://localhost:9292`), or point `GATEWAY_URL` at a deployed gateway.
 
 2. **Wallets.**
-   - The **buyer** wallet connects in the browser at checkout (MetaMask, or a
-     pasted key that never leaves the tab). It needs the payment stablecoin
-     (e.g. USDC) on the target testnet — EIP-3009 transfers are gasless for
-     the buyer. No buyer env var exists.
+   - The **buyer** wallet connects in the browser at checkout (MetaMask), or
+     comes from `BUYER_PRIVATE_KEY` in `.env.local` when you want to demo
+     without an extension — that one is local-development only. It needs the
+     payment stablecoin (e.g. USDC) on the target testnet — EIP-3009 transfers
+     are gasless for the buyer.
    - The **seller** wallet must be registered as a payee wallet on the
      gateway, with the stablecoins it accepts activated, and needs native gas
      for authorize/capture/void transactions. Its key goes in
