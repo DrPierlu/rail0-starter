@@ -1,33 +1,24 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/http";
-import { refreshOrder } from "@/lib/shop";
-import { getOrder } from "@/lib/store";
+import { readOrder } from "@/lib/shop";
 
 /**
- * One order, refreshed from the gateway on the way out — this is what the buyer's
- * order card polls.
+ * One order — this is what the buyer's checkout panel polls.
  *
- * A failed refresh falls back to the stored snapshot flagged `stale`, exactly like
- * the merchant's order list does (GET /api/shop/orders): the gateway read is the
- * fragile half, and its failure is not this order's absence. A gateway that 404s
- * the payment (redeployed on a fresh database, a pruned payment, a transient
- * routing 404) used to surface here as a 404 for the ORDER — and the card takes a
- * 404 as terminal: "order not found", polling stopped, for an order that is right
- * there in the store.
+ * The id IS the rail0 payment id: there is no local order id any more, because there is
+ * no local order. Which also settles what a 404 means here — the gateway has no such
+ * payment — where before it could mean either that or "the gateway read failed", and
+ * the card treated both as terminal.
  *
- * The one real 404 is an id the store does not know, which is the only case that
- * still answers one.
+ * Open, like the quote: a payment id is a 32-byte identifier the buyer holds, and the
+ * projection carries nothing operational (see order-view).
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    try {
-      return NextResponse.json({ order: await refreshOrder(id) });
-    } catch (error) {
-      const stored = await getOrder(id);
-      if (!stored) throw error;
-      return NextResponse.json({ order: { ...stored, stale: true } });
-    }
+    const order = await readOrder(id);
+    if (!order) return NextResponse.json({ error: "order not found" }, { status: 404 });
+    return NextResponse.json({ order });
   } catch (error) {
     return errorResponse(error);
   }

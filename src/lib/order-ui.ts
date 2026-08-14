@@ -1,4 +1,4 @@
-import type { OrderState } from "./store";
+import type { OrderState } from "./order-view";
 
 // Shared order-state presentation, used by both the buyer chat's live order
 // card and the merchant back-office so the same state always looks the same.

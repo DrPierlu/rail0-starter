@@ -1,5 +1,5 @@
 import { TERMINAL_STATES } from "./order-ui";
-import type { OrderState } from "./store";
+import type { OrderState } from "./order-view";
 
 /**
  * Where a checkout has got to — the single source for what the docked panel shows.
@@ -14,6 +14,9 @@ export const CHECKOUT_STEPS = ["connect", "sign_login", "sign_payment", "confirm
 
 export type CheckoutStep = (typeof CHECKOUT_STEPS)[number] | "done";
 
+/** The two signatures the checkout card asks for, in order. */
+export type SigningStage = "sign_login" | "sign_payment";
+
 export const STEP_LABELS: Record<CheckoutStep, string> = {
   connect: "Connect wallet",
   sign_login: "Sign in",
@@ -26,22 +29,22 @@ export const STEP_LABELS: Record<CheckoutStep, string> = {
  * The step to act on now, or null when there is no checkout in flight (nothing to
  * dock — the panel hides).
  *
- * Precedence is the point. A pending signature outranks the order's state, because an
- * order sits at `awaiting_payment` for the whole time the payer is signing: reading
- * the state first would report "confirming" while the buyer still has something to do.
- * And an unconnected wallet outranks the signature itself — there is no way to sign
- * without one, so asking for the wallet IS the current step rather than an error to
- * discover after pressing a button.
+ * Precedence is the point. A signature the card is waiting for outranks the order's
+ * state, because for most of the checkout there IS no order yet — the payment is created
+ * between the two signatures — and reading the state first would report nothing at all
+ * while the buyer still has something to do. And an unconnected wallet outranks the
+ * signature itself: there is no way to sign without one, so asking for the wallet IS the
+ * current step rather than an error to discover after pressing a button.
  */
 export function currentStep(input: {
   hasWallet: boolean;
-  /** The signing step still waiting for this buyer, if any. */
-  pendingSigning?: "sign_login" | "sign_payment";
-  /** The active order's state, once there is an order. */
+  /** The signature the card is waiting on, if any. */
+  awaitingSignature?: SigningStage;
+  /** The order's state, once the payment exists. */
   orderState?: OrderState;
 }): CheckoutStep | null {
-  if (input.pendingSigning) {
-    return input.hasWallet ? input.pendingSigning : "connect";
+  if (input.awaitingSignature) {
+    return input.hasWallet ? input.awaitingSignature : "connect";
   }
   if (!input.orderState) return null;
   return TERMINAL_STATES.has(input.orderState) ? "done" : "confirming";
@@ -55,35 +58,34 @@ export function stepIndex(step: CheckoutStep): number {
   return step === "done" ? CHECKOUT_STEPS.length : CHECKOUT_STEPS.indexOf(step);
 }
 
-/** A transcript part, reduced to what deciding the pending signature needs. */
-export type CheckoutEvent =
-  | { kind: "signing"; key: string; orderId?: string }
-  | { kind: "order"; orderId: string };
+/** A transcript part, reduced to what deciding the pending checkout needs. */
+export type CheckoutEvent = { kind: "checkout"; key: string } | { kind: "order"; orderId: string };
 
 /**
- * The signature still owed, from the transcript in order — or null if none is.
+ * The checkout still owed its signatures, from the transcript in order — or null.
  *
- * The transcript is the authority, not the set of keys signed in this tab. That set is
- * component state while the transcript is restored from sessionStorage, so on its own it
- * reported every already-signed step as unsigned after a reload: the docked box offered
- * to sign a payment the transcript itself showed as submitted and confirming.
+ * The transcript is the authority, not the set of checkouts completed in this tab. That
+ * set is component state while the transcript is restored from sessionStorage, so on its
+ * own it reported an already-finished checkout as pending after a reload: the docked box
+ * offered to sign a payment the transcript itself showed as confirming.
  *
- * So an `order` event for the same order appearing AFTER a `signing` event clears it —
- * submitting an order, or reading its state, is only reachable once it is signed.
- * `signedKeys` still carries the moment between signing and the agent's next tool call,
- * when the transcript holds no such proof yet.
+ * So an `order` event appearing AFTER a `checkout` event clears it. An order can only
+ * exist once that checkout produced it — the payment is created by the card, mid-flow —
+ * so seeing one is proof the flow moved on. `completed` still carries the moment between
+ * the card finishing and the agent's next tool call, when the transcript holds no such
+ * proof yet.
  */
-export function pendingSignature(
+export function pendingCheckout(
   events: readonly CheckoutEvent[],
-  signedKeys: ReadonlySet<string>,
-): { key: string; orderId?: string } | null {
-  let pending: { key: string; orderId?: string } | null = null;
+  completed: ReadonlySet<string>,
+): { key: string } | null {
+  let pending: { key: string } | null = null;
   for (const event of events) {
-    if (event.kind === "signing") {
-      pending = signedKeys.has(event.key) ? null : { key: event.key, orderId: event.orderId };
+    if (event.kind === "checkout") {
+      pending = completed.has(event.key) ? null : { key: event.key };
       continue;
     }
-    if (pending?.orderId === event.orderId) pending = null;
+    pending = null;
   }
   return pending;
 }

@@ -3,38 +3,30 @@
 import type { EveMessageInputRequest } from "eve/client";
 import type { EveDynamicToolPart } from "eve/react";
 import { useState } from "react";
-import { asSigningOutput, SigningCard, signingKey } from "./signing-card";
+import { asCheckoutOutput, checkoutKey } from "./checkout-card";
 import { orderCardOrderId, type ToolPart, ToolView } from "./tool-views";
 
 // Bridge between eve's `dynamic-tool` parts and the rich tool views built for
 // the AI SDK variant. The lifecycle states line up one-to-one, so everything
 // except the approval flow is a rename — which keeps tool-views.tsx identical
-// across the two branches. The two checkout signing steps get their own card:
-// the browser wallet signs, and the signature goes to the storefront stash,
-// never through the chat.
+// across the two branches. The checkout is the exception: it is interactive, so
+// the transcript only ever points at it and the docked panel holds the one card
+// that talks to the wallet.
 
 export function EveToolView({
   part,
   onRespond,
-  onContinue,
   busy,
-  pinnedKey = null,
-  signedKeys,
-  onSigned,
+  pendingKey = null,
   supersededCard = false,
   activeOrderId,
 }: {
   part: EveDynamicToolPart;
   /** Answer a pending HITL request (approve/deny). */
   onRespond: (requestId: string, answer: { optionId?: string; text?: string }) => void;
-  /** Send a chat message (the signing cards nudge the agent onward with it). */
-  onContinue: (text: string) => void;
   busy: boolean;
-  /** The signing step currently held in the pinned slot, if any. */
-  pinnedKey?: string | null;
-  /** Signing steps already signed, so a transcript copy renders as done. */
-  signedKeys?: ReadonlySet<string>;
-  onSigned?: (key: string) => void;
+  /** The checkout currently held in the docked slot, if any. */
+  pendingKey?: string | null;
   /** An OrderCard for an order already shown earlier in the transcript. */
   supersededCard?: boolean;
   /** The order the docked panel is live on. */
@@ -57,29 +49,25 @@ export function EveToolView({
   }
 
   if (part.state === "output-available") {
-    const signing = asSigningOutput(part.output);
-    if (signing) {
-      const key = signingKey(signing);
-      // The pinned slot holds the ONE interactive instance of a pending step. Rendering
-      // the card here as well would give the same step two independent `state`s, so
-      // signing in one would leave the other still offering to sign. A stub points up
-      // instead, and the transcript keeps its place in the conversation.
-      if (key === pinnedKey) {
-        return (
-          <div className="rounded-lg border border-dashed border-blue-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-blue-900">
-            ↓ {signing.step === "sign_login" ? "Sign in as the buyer" : "Sign the payment"} —
-            waiting for your signature, in the box above the message field
-          </div>
-        );
-      }
+    const checkout = asCheckoutOutput(part.output);
+    if (checkout) {
+      // The docked slot holds the ONE instance of the checkout card — it owns a wallet
+      // conversation and a payment created halfway through, so a second copy here would
+      // be a second checkout wearing the same clothes. The transcript points at it and
+      // keeps its place in the conversation.
+      const pending = checkoutKey(checkout) === pendingKey;
       return (
-        <SigningCard
-          output={signing}
-          onContinue={onContinue}
-          busy={busy}
-          signed={signedKeys?.has(key)}
-          onSigned={onSigned}
-        />
+        <div
+          className={
+            pending
+              ? "rounded-lg border border-dashed border-blue-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-blue-900"
+              : "rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-700"
+          }
+        >
+          {pending
+            ? `↓ Checkout for ${checkout.total} ${checkout.token} — waiting for you, in the box above the message field`
+            : `checkout started · ${checkout.total} ${checkout.token}`}
+        </div>
       );
     }
   }

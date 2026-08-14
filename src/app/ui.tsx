@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { IN_FLIGHT_STATES, STATE_STYLES, shortId, stateLabel } from "@/lib/order-ui";
-import type { OrderState } from "@/lib/store";
+import type { OrderState } from "@/lib/order-view";
 
 // Small client-side pieces shared by the buyer chat and the merchant page.
 

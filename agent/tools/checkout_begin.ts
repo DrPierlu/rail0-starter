@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { budgetPolicy, spentInWindow, withinBudget } from "../../src/lib/agent-budget";
-import { beginCheckout, checkoutAsAgent, getShop } from "../../src/lib/buyer";
+import { checkoutAsAgent, getShop, siweChallenge } from "../../src/lib/buyer";
 import { agentWalletAddress } from "../../src/lib/buyer-signer";
 import { shopBase } from "../lib/base";
 import { cartTotal, getCart } from "../lib/cart";
@@ -16,12 +17,10 @@ export default defineTool({
   // there (docs/tools/human-in-the-loop.md). The client half was already built: the buyer
   // UI renders `approval-requested` parts (src/app/buyer/eve-tool-view.tsx).
   //
-  // THIS step and not the later ones. With a HUMAN buyer the wallet already gates the
-  // MONEY — nothing moves without their SIWE and EIP-3009 signatures — so an approval on
-  // checkout_submit would only re-ask about a payment they had just signed. What no
-  // signature covers is INTENT: this call creates the merchant-side order and mints the
-  // deposit nonce before any wallet prompt appears. The signature says "I authorise this
-  // payment"; the approval says "I asked for this order".
+  // THIS step and not a later one — there is no later one for a human buyer. With a
+  // person at the wallet the MONEY is gated by their two signatures, so what no signature
+  // covers is INTENT: this call is what puts a checkout card in front of them at all.
+  // The signature says "I authorise this payment"; the approval says "I asked for this".
   //
   // With an AGENT WALLET that reasoning collapses: the agent produces both signatures, so
   // nothing else asks anyone anything and this approval is the only gate on spending.
@@ -81,9 +80,10 @@ export default defineTool({
     }
   },
   description:
-    "Start the checkout for the current cart. With an agent wallet configured this runs " +
-    "the whole checkout and returns the finished order. Otherwise it creates the order " +
-    "and the sign-in challenge: STOP and wait — the user signs in the card shown in chat.",
+    "Check out the current cart. With an agent wallet configured this runs the whole " +
+    "checkout and returns the finished order. Otherwise it quotes the cart and returns " +
+    "the sign-in challenge: STOP and wait — the shopper signs, pays and submits in the " +
+    "card shown in chat, then tells you the order id.",
   inputSchema: z.object({
     chain_id: z.number().int().describe("Chosen chain id, from payment_options."),
     token_address: z
@@ -104,11 +104,11 @@ export default defineTool({
     if (cart.length === 0) return { error: "cart is empty" };
     const items = cart.map((l) => ({ product_id: l.product_id, qty: l.qty }));
 
-    // The agent's own wallet: no cards, no waiting, no second and third tool call.
-    // Approval has already run by the time we are here, so reaching this line means the
-    // spend is allowed — either it was under the ceiling or a human said yes.
+    // The agent's own wallet: no cards, no waiting, no second tool call. Approval has
+    // already run by the time we are here, so reaching this line means the spend is
+    // allowed — either it was under the ceiling or a human said yes.
     if (agentWalletAddress()) {
-      const { order, rail0_id } = await checkoutAsAgent(shopBase(), items, chain_id, token_address);
+      const { order } = await checkoutAsAgent(shopBase(), items, chain_id, token_address);
       await rememberOrder(order.id);
       return {
         step: "done" as const,
@@ -116,7 +116,6 @@ export default defineTool({
         total: order.total,
         token: order.token.symbol,
         state: order.state,
-        rail0_id,
       };
     }
 
@@ -124,42 +123,36 @@ export default defineTool({
       return { error: "no wallet connected — ask the shopper to connect one, then retry" };
     }
 
-    const { order, siwe_message, deposit_nonce } = await beginCheckout(
-      shopBase(),
+    // The whole of the human checkout, handed to the card in one go: what it costs, what
+    // it is for, and the exact text to sign. The card does the rest — create, sign, submit
+    // — because it is the only party that ever holds the signatures. Nothing is created
+    // anywhere yet, so there is no order id to report and nothing to clean up if the
+    // shopper walks away.
+    const quote = await getShop(shopBase()).quote(items, chain_id, token_address);
+    return {
+      step: "checkout" as const,
+      // Identity for the transcript only — which card is still owed a signature. Not a
+      // secret and not a handle on anything: the server keeps no checkout to look up.
+      checkout_id: randomUUID().slice(0, 8),
       items,
       chain_id,
       token_address,
-      buyer_address,
-    );
-    // The buyer's own record of the order, so `my_orders` never needs the
-    // merchant's (now gated) order book.
-    await rememberOrder(order.id);
-    // deposit_nonce rides the tool output because that is how the signing card is
-    // handed everything else it needs (the card reads part.output verbatim, not the
-    // model's retelling of it). It is what the card must present to deposit the
-    // signature — see SigningEntry.deposit_nonce.
-    return {
-      step: "sign_login",
-      order_id: order.id,
-      total: order.total,
-      token: order.token.symbol,
-      siwe_message,
-      deposit_nonce,
+      siwe_message: await siweChallenge(buyer_address),
+      lines: quote.lines,
+      total: quote.total,
+      token: quote.token.symbol,
     };
   },
   // What the MODEL sees. The card still gets the full return — toModelOutput "only
   // affects the model. Channel event handlers and hooks still get the full output on
   // action.result" (docs/tools/overview.mdx).
   //
-  // So the deposit nonce and the SIWE text never enter model context or the durable model
-  // history. The nonce is a capability: it is what lets a signature be deposited for this
-  // checkout, and it was previously kept out of replies by a prompt rule ("never repeat
-  // it") — the model being asked not to say a secret it was handed. The docs name this
-  // exact case: "Do not return secrets, credentials, unnecessary personal data, or
-  // unbounded sensitive content from tools. Filter, minimize, and redact tool outputs
-  // before returning them."
-  //
-  // The model only needs to know which step it is on and what to tell the user.
+  // So the SIWE text never enters model context or the durable model history. The EIP-712
+  // payload never comes near it either — it is minted by /api/checkout/create straight
+  // into the card. Both must be signed VERBATIM, which makes routing them through a model
+  // a corruption risk on top of a disclosure one: a single altered hex digit burns the
+  // payment. The docs name the case: "Do not return secrets, credentials, unnecessary
+  // personal data, or unbounded sensitive content from tools."
   toModelOutput(output) {
     if ("error" in output) return { type: "json", value: { error: output.error } };
     // The autonomous run is already finished, so telling the model to wait for a card
@@ -182,10 +175,10 @@ export default defineTool({
       type: "json",
       value: {
         step: output.step,
-        order_id: output.order_id,
         total: output.total,
         token: output.token,
-        awaiting: "the user signs the sign-in card shown in chat",
+        awaiting:
+          "the shopper signs in and pays in the card shown in chat, then reports the order id",
       },
     };
   },

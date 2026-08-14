@@ -4,11 +4,11 @@ import type { ClientSessionState, MessageStreamEvent } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
-import { type CheckoutEvent, pendingSignature } from "@/lib/checkout-step";
+import { type CheckoutEvent, pendingCheckout } from "@/lib/checkout-step";
 import { pickSuggestions } from "@/lib/suggestions";
+import { asCheckoutOutput, checkoutKey } from "./checkout-card";
 import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
-import { asSigningOutput, signingKey } from "./signing-card";
 import { orderCardOrderId } from "./tool-views";
 import { useWallet, WalletChip, WalletProvider } from "./wallet";
 
@@ -174,12 +174,11 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   // renders on the server and there is no markup for the client to disagree with.
   const [suggestions] = useState(() => pickSuggestions(4));
   const { wallet } = useWallet();
-  // Signing steps already signed in this tab. The docked box needs it to know when to
-  // let go, and the transcript copies need it to render as done rather than offering a
-  // second signature.
-  const [signedKeys, setSignedKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const onSigned = useCallback((key: string) => {
-    setSignedKeys((current) => new Set(current).add(key));
+  // Checkouts finished in this tab. The docked box needs it to know when to let go, and
+  // the transcript stub needs it to read as done rather than as still waiting.
+  const [doneKeys, setDoneKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const onDone = useCallback((key: string) => {
+    setDoneKeys((current) => new Set(current).add(key));
   }, []);
 
   // Set the instant a new conversation is requested. The turn being aborted can still
@@ -300,17 +299,17 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   // need. It was two walks that had to agree on what counts as "the current checkout";
   // deriving them together is what keeps them from disagreeing.
   //
-  //   pending — the signature still owed. The LAST signing step the agent produced that
-  //     has not been signed, and that the conversation has not already moved past.
+  //   pending — the checkout still in flight. The LAST one the agent started that has
+  //     not finished, and that the conversation has not already moved past.
   //
-  //     `signedKeys` alone was not enough, and the failure was visible: it is component
-  //     state, while the transcript is restored from sessionStorage, so after a reload
-  //     every already-signed step looked unsigned again — the box offered to sign a
-  //     payment the transcript itself showed as submitted and confirming. So the
-  //     transcript is the authority: an order-card output for the SAME order appearing
-  //     AFTER the signing step means the flow moved on, and the signature is done.
-  //     signedKeys still matters for the moment between signing and the agent's next
-  //     tool call, when the transcript has no such proof yet.
+  //     `doneKeys` alone was not enough, and the failure was visible: it is component
+  //     state, while the transcript is restored from sessionStorage, so after a reload a
+  //     finished checkout looked unfinished again — the box offered to sign a payment
+  //     the transcript itself showed as confirming. So the transcript is the authority:
+  //     an order-card output appearing AFTER the checkout step means the flow moved on,
+  //     because an order only exists once that checkout created it. doneKeys still
+  //     matters for the moment between the card finishing and the agent's next tool
+  //     call, when the transcript has no such proof yet.
   //
   //   superseded — repeat OrderCards for the same order, by toolCallId. The agent calls
   //     order_status again and again while a payment confirms, and each output rendered
@@ -320,7 +319,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   //   lastOrderId — the checkout the panel is about, when no signature is owed.
   const { pending, superseded, lastOrderId } = useMemo(() => {
     const events: CheckoutEvent[] = [];
-    const outputByKey = new Map<string, ReturnType<typeof asSigningOutput>>();
+    const outputByKey = new Map<string, ReturnType<typeof asCheckoutOutput>>();
     const seen = new Map<string, string>();
     const superseded = new Set<string>();
     let lastOrderId: string | undefined;
@@ -329,11 +328,11 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
       for (const part of message.parts) {
         if (part.type !== "dynamic-tool" || part.state !== "output-available") continue;
 
-        const signing = asSigningOutput(part.output);
-        if (signing) {
-          const key = signingKey(signing);
-          outputByKey.set(key, signing);
-          events.push({ kind: "signing", key, orderId: signing.order_id });
+        const checkout = asCheckoutOutput(part.output);
+        if (checkout) {
+          const key = checkoutKey(checkout);
+          outputByKey.set(key, checkout);
+          events.push({ kind: "checkout", key });
           continue;
         }
 
@@ -346,17 +345,18 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
       }
     }
 
-    // The decision itself is pendingSignature (lib/checkout-step), not a copy of it here:
+    // The decision itself is pendingCheckout (lib/checkout-step), not a copy of it here:
     // the precedence it encodes is what got this wrong once already, and a duplicate would
     // be the version no test covers.
-    const owed = pendingSignature(events, signedKeys);
+    const owed = pendingCheckout(events, doneKeys);
     const pending = owed ? { key: owed.key, output: outputByKey.get(owed.key) } : null;
     return { pending, superseded, lastOrderId };
-  }, [agent.data.messages, signedKeys]);
+  }, [agent.data.messages, doneKeys]);
 
-  // A signature owed names its own order; otherwise it is the last one mentioned. This
-  // is the order the panel goes live on, and the one the transcript stops duplicating.
-  const activeOrderId = pending?.output?.order_id ?? lastOrderId;
+  // The last order the conversation mentioned: what the panel goes live on once the
+  // card has created it, and the one the transcript stops duplicating. A checkout in
+  // flight has no order yet — the card reports its payment to the panel directly.
+  const activeOrderId = lastOrderId;
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
@@ -418,11 +418,8 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
                       key={i}
                       part={part}
                       onRespond={respond}
-                      onContinue={sendText}
                       busy={busy}
-                      pinnedKey={pending?.key ?? null}
-                      signedKeys={signedKeys}
-                      onSigned={onSigned}
+                      pendingKey={pending?.key ?? null}
                       supersededCard={superseded.has(part.toolCallId)}
                       activeOrderId={activeOrderId}
                     />
@@ -467,12 +464,11 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
           was not even the only live surface — the order status polled away in a card a
           few messages up. One box, one position, one thing at a time. */}
       <CheckoutPanel
-        signing={pending?.output ?? undefined}
+        checkout={pending?.output ?? undefined}
         orderId={activeOrderId}
         onContinue={sendText}
+        onDone={onDone}
         busy={busy}
-        signed={pending ? signedKeys.has(pending.key) : undefined}
-        onSigned={onSigned}
       />
       <form
         onSubmit={(e) => {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Order } from "@/lib/store";
+import { shortId } from "@/lib/order-ui";
+import type { Order } from "@/lib/order-view";
 import { StateBadge } from "../ui";
 import { OrderCard } from "./order-card";
 
@@ -68,16 +69,15 @@ export function ToolView({
       return <CartTable cart={(output?.cart as CartLine[]) ?? []} />;
     case "payment_options":
       return <PaymentOptions methods={(output?.payment_methods as PaymentMethod[]) ?? []} />;
-    // checkout_submit is the moment funds move into escrow — the demo's
-    // payoff. It used to match a "checkout" case for a tool that no longer
-    // exists (the flow split into begin/payment/submit), so the settle step
-    // fell through to the generic JSON chip and the live OrderCard
-    // (authorizing -> in_escrow polling) never appeared.
-    // The transcript never holds a LIVE order any more: the docked panel is the single
-    // place an order's state updates. So the active order is a reference pointing there,
-    // and any other order is a snapshot of what the agent saw — which is what a
-    // transcript should be.
-    case "checkout_submit": {
+    // The AUTONOMOUS checkout — the agent's own wallet paid, so the tool comes back with
+    // a finished order and there was never a card. (A human checkout is interactive and
+    // never reaches here: EveToolView renders it as a pointer to the docked panel.)
+    //
+    // The transcript never holds a LIVE order: the docked panel is the single place an
+    // order's state updates. So the active order is a reference pointing there, and any
+    // other order is a snapshot of what the agent saw — which is what a transcript
+    // should be.
+    case "checkout_begin": {
       const orderId = output?.order_id as string | undefined;
       if (!orderId) return <ToolChip part={part} />;
       if (orderId === activeOrderId) return <OrderReference orderId={orderId} />;
@@ -216,7 +216,7 @@ function OrderList({ orders }: { orders: Order[] }) {
               key={o.id}
               className="flex items-center gap-2 border-b border-neutral-200 px-3 py-1.5 text-xs last:border-b-0 dark:border-neutral-800"
             >
-              <span className="font-mono font-semibold">#{o.id}</span>
+              <span className="font-mono font-semibold">{shortId(o.id)}</span>
               <StateBadge state={o.state} />
               <span className="ml-auto tabular-nums font-semibold">
                 {o.total} {o.token.symbol}
@@ -282,7 +282,9 @@ export function ToolChip({ part }: { part: ToolPart }) {
  */
 export function orderCardOrderId(toolName: string, output: unknown): string | undefined {
   const o = output as Record<string, unknown> | undefined;
-  if (toolName === "checkout_submit") {
+  // Only the autonomous checkout carries an order: the human one has not created the
+  // payment yet when it returns, and its card reports the id to the panel directly.
+  if (toolName === "checkout_begin") {
     return typeof o?.order_id === "string" ? o.order_id : undefined;
   }
   if (toolName === "order_status") {

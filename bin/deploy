@@ -71,18 +71,14 @@ if command -v vercel >/dev/null 2>&1; then
   for key in "${required[@]}"; do
     grep -q "\b${key}\b" <<<"$env_list" || problem "$key is not set in the Vercel project"
   done
-  # A Redis store is NOT optional here. The file driver writes under .data/, and
-  # Vercel's filesystem is ephemeral and read-only for the app — checkout_begin fails
-  # with EROFS, so the buyer flow dies at the first step.
-  if ! grep -qE "\b(KV_REST_API_URL|UPSTASH_REDIS_REST_URL)\b" <<<"$env_list"; then
-    problem "no Redis store configured (KV_REST_API_URL or UPSTASH_REDIS_REST_URL) — the file store cannot work on Vercel"
-  fi
+  # No store to check for. The app keeps nothing between requests — the order is the
+  # rail0 payment and the buyer's session is a cookie — so Vercel's ephemeral,
+  # read-only filesystem has nothing to break. This preflight used to REQUIRE Redis
+  # here, and that requirement is what the checkout rewrite removed.
 else
   note "vercel CLI not installed, so the project's environment was NOT checked."
-  note "It must carry: ${required[*]}, plus a Redis store"
-  note "  (KV_REST_API_URL + KV_REST_API_TOKEN, or the UPSTASH_REDIS_REST_* pair)."
-  note "Without Redis the buyer checkout fails at the first step: Vercel's filesystem"
-  note "is read-only for the app, so the file store raises EROFS."
+  note "It must carry: ${required[*]}"
+  note "There is no store to provision: no Redis, no KV, no database."
 fi
 
 # eve link pulls AI Gateway credentials, and this agent does NOT use them: agent.ts

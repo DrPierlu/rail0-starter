@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { TERMINAL_STATES } from "@/lib/order-ui";
+import { shortId, TERMINAL_STATES } from "@/lib/order-ui";
+import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
-import type { Order } from "@/lib/store";
 import { CopyableId, StateBadge } from "../ui";
 
 /** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
@@ -51,11 +51,10 @@ export function OrderCard({
       try {
         const res = await fetch(`/api/shop/orders/${orderId}`);
         if (cancelled) return;
-        // The only terminal answer, and it now means one thing: the merchant's
-        // store has no such order. A gateway read that failed used to arrive here
-        // as a 404 too, which latched this card on "order not found" — and stopped
-        // the poll for good — while the order was in the store all along. The route
-        // answers the stored snapshot (flagged stale) for that case instead.
+        // The only terminal answer, and it means one thing: the gateway has no such
+        // payment. A gateway read that FAILED is a 502 from the route (see
+        // lib/http), never a 404 — the distinction matters here, because a 404
+        // latches this card on "order not found" and stops the poll for good.
         if (res.status === 404) {
           setGone(true);
           return;
@@ -78,14 +77,14 @@ export function OrderCard({
   if (gone) {
     return (
       <div className="rounded-xl border border-neutral-200 p-3 text-xs text-neutral-500 dark:border-neutral-800">
-        order {orderId} not found
+        order {shortId(orderId)} not found
       </div>
     );
   }
   if (!order) {
     return (
       <div className="rounded-xl border border-neutral-200 p-3 text-xs text-neutral-400 dark:border-neutral-800">
-        loading order {orderId}…
+        loading order {shortId(orderId)}…
       </div>
     );
   }
@@ -93,7 +92,8 @@ export function OrderCard({
   return (
     <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs font-semibold">#{order.id}</span>
+        {/* The id IS the rail0 payment id now: truncated here, copied in full on click. */}
+        <CopyableId value={order.id} />
         <StateBadge state={order.state} />
         <span className="ml-auto text-sm font-semibold">
           {order.total} {order.token.symbol}
@@ -104,7 +104,6 @@ export function OrderCard({
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
         {order.token.chain_name && <span>{order.token.chain_name}</span>}
-        {order.rail0_id && <CopyableId value={order.rail0_id} />}
         {order.error && <span className="text-red-500">{order.error}</span>}
         <Link href="/merchant" className="ml-auto text-neutral-400 hover:underline">
           view on /merchant →

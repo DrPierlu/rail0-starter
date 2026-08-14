@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import checkoutBegin from "../agent/tools/checkout_begin";
-import checkoutPayment from "../agent/tools/checkout_payment";
-import checkoutSubmit from "../agent/tools/checkout_submit";
+import orderStatus from "../agent/tools/order_status";
 
 /**
  * The approval on checkout_begin is a small property that is easy to drop in a refactor,
@@ -38,12 +37,11 @@ describe("checkout approval", () => {
     await expect(policy()).resolves.toBe("user-approval");
   });
 
-  // Not an oversight: with a human buyer the money is already gated by the wallet at
-  // these steps, and an approval here would ask the shopper to confirm a payment they
-  // have just signed. The agent path does not reach them at all — checkout_begin runs the
-  // whole checkout — so its spending gate is the one above, not these.
-  it("leaves the signature-gated steps unguarded on purpose", () => {
-    expect(checkoutPayment.approval).toBeUndefined();
-    expect(checkoutSubmit.approval).toBeUndefined();
+  // checkout_begin is now the ONLY tool that can spend, which is what makes the gate
+  // above the whole gate. The human checkout runs in the card from here on (it holds the
+  // signatures), and the autonomous one runs inside this same call — so there is no
+  // second money-moving tool that could quietly bypass the approval. A read is a read.
+  it("leaves the read-only tools unguarded", () => {
+    expect(orderStatus.approval).toBeUndefined();
   });
 });

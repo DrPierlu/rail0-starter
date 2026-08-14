@@ -5,14 +5,15 @@ import {
   CHECKOUT_STEPS,
   type CheckoutStep,
   currentStep,
+  type SigningStage,
   STEP_LABELS,
   stepIndex,
 } from "@/lib/checkout-step";
 import { TERMINAL_STATES } from "@/lib/order-ui";
+import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
-import type { Order } from "@/lib/store";
+import { CheckoutCard, type CheckoutOutput, type CheckoutStage } from "./checkout-card";
 import { OrderCard } from "./order-card";
-import { SigningCard, type SigningOutput } from "./signing-card";
 import { useWallet } from "./wallet";
 
 /** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
@@ -37,30 +38,37 @@ const POLL_MS = 3000;
  * at. Renders nothing at all when no checkout is in flight.
  */
 export function CheckoutPanel({
-  signing,
+  checkout,
   orderId,
   onContinue,
+  onDone,
   busy,
-  signed,
-  onSigned,
 }: {
-  /** The signature still owed, if any. */
-  signing?: SigningOutput;
-  /** The checkout's order, once it exists. */
+  /** The checkout still in flight, if any. */
+  checkout?: CheckoutOutput;
+  /** The order the transcript is about, once one exists. */
   orderId?: string;
   onContinue: (text: string) => void;
+  onDone?: (key: string) => void;
   busy: boolean;
-  signed?: boolean;
-  onSigned?: (key: string) => void;
 }) {
   const { wallet } = useWallet();
   const [order, setOrder] = useState<Order | undefined>(undefined);
+  // How far the card has got. It is the card that knows — it is the one talking to the
+  // wallet and to the checkout routes — so the progress row follows it rather than
+  // guessing from the order, which does not even exist for the first two steps.
+  const [stage, setStage] = useState<CheckoutStage>("sign_login");
+  // The payment the card created, known here the moment it exists so the panel can go
+  // live on it without waiting for the agent's next tool call.
+  const [cardOrderId, setCardOrderId] = useState<string | undefined>(undefined);
+
+  const activeOrderId = cardOrderId ?? orderId;
 
   // The active order's state, polled here so it is read in exactly one place. Stops at
   // a terminal state, and starts over if the panel moves to a different order.
   const state = order?.state;
   useEffect(() => {
-    if (!orderId) {
+    if (!activeOrderId) {
       setOrder(undefined);
       return;
     }
@@ -68,7 +76,7 @@ export function CheckoutPanel({
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/shop/orders/${orderId}`);
+        const res = await fetch(`/api/shop/orders/${activeOrderId}`);
         if (cancelled || !res.ok) return;
         const body = (await res.json()) as { order?: Order };
         if (body.order) setOrder(body.order);
@@ -81,15 +89,19 @@ export function CheckoutPanel({
       cancelled = true;
       stop();
     };
-  }, [orderId, state]);
+  }, [activeOrderId, state]);
 
-  // The order in state may be a previous one for a tick after orderId changes; only
-  // trust its state when it is the order the panel was told about.
-  const step = currentStep({
-    hasWallet: !!wallet,
-    pendingSigning: signing?.step,
-    orderState: order?.id === orderId ? order?.state : undefined,
-  });
+  // The order in state may be a previous one for a tick after the id changes; only
+  // trust its state when it is the order the panel is actually about.
+  const step =
+    currentStep({
+      hasWallet: !!wallet,
+      awaitingSignature: checkout ? AWAITING[stage] : undefined,
+      orderState: order?.id === activeOrderId ? order?.state : undefined,
+    }) ??
+    // A checkout in flight always has something to show, even in the gap between the
+    // payment being submitted and the first poll answering for it.
+    (checkout ? "confirming" : null);
 
   if (!step) return null;
 
@@ -97,23 +109,41 @@ export function CheckoutPanel({
     <div className="border-t border-neutral-200 pt-2 dark:border-neutral-800">
       <StepRow step={step} />
       <div className="mt-2">
-        {signing ? (
-          <SigningCard
-            output={signing}
+        {checkout ? (
+          <CheckoutCard
+            // Keyed on the checkout: a new one must start at its first step rather than
+            // inherit the finished card's stage and payment.
+            key={checkout.checkout_id}
+            output={checkout}
             onContinue={onContinue}
+            onStage={setStage}
+            onOrder={setCardOrderId}
+            onDone={onDone}
             busy={busy}
-            signed={signed}
-            onSigned={onSigned}
           />
-        ) : orderId ? (
+        ) : activeOrderId ? (
           // Live: this is the single polling card now, and it reads the order this
           // panel already fetched rather than opening a second loop.
-          <OrderCard orderId={orderId} initial={order} live={false} />
+          <OrderCard orderId={activeOrderId} initial={order} live={false} />
         ) : null}
       </div>
     </div>
   );
 }
+
+/**
+ * The signature the card is waiting for at each stage — including the two stages where
+ * it is waiting on the network instead. `creating` sits between the two signatures, and
+ * naming the NEXT one there is what keeps the progress row moving forward rather than
+ * flicking back to step 1 while the payment is created.
+ */
+const AWAITING: Record<CheckoutStage, SigningStage | undefined> = {
+  sign_login: "sign_login",
+  creating: "sign_payment",
+  sign_payment: "sign_payment",
+  submitting: undefined,
+  done: undefined,
+};
 
 /** The sequence, with everything before the current step marked done. */
 function StepRow({ step }: { step: CheckoutStep }) {

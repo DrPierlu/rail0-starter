@@ -18,22 +18,23 @@ just a landing page to pick a side):
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| **Buyer agent** | `agent/` (durable [Vercel eve](https://eve.dev) agent, mounted on this app by `withEve()` in `next.config.ts`) + the chat UI on `/buyer` | Commerce tools: browses the catalog, builds a cart, and on your confirmation runs the three-step checkout below. The session is durable server-side and survives cold starts and deploys |
-| **Storefront API** | `src/app/api/shop/*` + `src/app/api/checkout/*` | The merchant server: products, accepted payment methods (read live from the gateway), orders, and the signature drop-box. Verifies the buyer's payment against the order, then **authorizes it automatically** — funds move to escrow |
+| **Buyer agent** | `agent/` (durable [Vercel eve](https://eve.dev) agent, mounted on this app by `withEve()` in `next.config.ts`) + the chat UI on `/buyer` | Commerce tools: browses the catalog, builds a cart, and on your confirmation starts the checkout below. The session is durable server-side and survives cold starts and deploys |
+| **Storefront API** | `src/app/api/shop/*` | The merchant server: products, accepted payment methods and prices (all read live from the gateway and the catalog), the order book, and the escrow. Re-prices what a payment claims to buy, then **authorizes it automatically** — funds move to escrow |
+| **Checkout API** | `src/app/api/checkout/*` | The buyer's two server-side steps: create the payment from a SIWE signature, then submit it with the EIP-3009 one. The browser signs; these routes are what talk to rail0 |
 | **Merchant view** | `/merchant` | Minimal back-office: order list with live payment state, **Fulfil & capture** and **Cancel & void** buttons. Gated on `MERCHANT_TOKEN` — sign in once per browser |
 
 Both sides use the [`@rail0/sdk`](https://github.com/commercelayer/rail0-ts)
 TypeScript SDK — no CLI or binary dependency, so the template deploys anywhere
 Next.js does.
 
-**A private key is never typed into the app.** The buyer connects MetaMask, and
-the checkout signs in chat via two signing cards — SIWE sign-in, then the
-EIP-3009 payment authorization — so the key stays in the extension and the page
-never sees it. Signatures reach the storefront out-of-band (`POST
-/api/checkout/:id/signature`), never through the model's context. That drop-box
-is gated on a per-checkout nonce minted when the checkout begins — order ids are
-not secret, so without it a guessed id could overwrite a buyer's stashed
-signatures and kill the checkout.
+**A private key is never typed into the app.** The buyer connects MetaMask and the
+checkout card in the chat asks for two signatures — SIWE sign-in, then the EIP-3009
+payment authorization — so the key stays in the extension and the page never sees it.
+Each signature goes straight to the server route that uses it (`/api/checkout/create`,
+`/api/checkout/submit`), never through the model's context, and the browser never talks
+to the gateway itself. Between the two, the buyer's gateway session rides in an httpOnly
+cookie: the credential belongs to the buyer, not to this server, which is why nothing is
+stored here.
 
 **Or the agent buys on its own.** Set `BUYER_PRIVATE_KEY` and the deployment has
 its own wallet: `checkout_begin` runs the whole checkout — sign-in, payment
@@ -44,10 +45,10 @@ the checkout itself. Two ceilings bound that: `BUYER_MAX_ORDER`
 total — the part a per-order cap cannot do. Above either, the agent asks a person
 to approve, then still buys by itself. The window total is read from the
 gateway's own record of what the wallet paid, so there is no ledger to keep and
-nothing the agent could rewrite. Before
-turning this on anywhere public, close the agent's channel
-(`agent/channels/eve.ts` ships anonymous) — otherwise anyone with the URL directs
-the spending.
+nothing the agent could rewrite. The agent's channel
+(`agent/channels/eve.ts`) is closed for the same reason: the approval for an
+over-ceiling spend is answered over that channel, so it is gated on `BUYER_TOKEN`
+everywhere except a local dev server.
 
 The seller key is server-side by design: that is the merchant's own backend
 signing its own transactions.
@@ -57,14 +58,14 @@ signing its own transactions.
 1. You chat with the agent; it reads the catalog and the merchant's accepted
    chain/stablecoin pairs (from the gateway's public `payment_methods`
    endpoint — what's accepted is configured on the gateway, not in this repo).
-2. On your explicit confirmation the checkout runs in three tool steps:
-   `checkout_begin` creates the order and the rail0 payment in `authorize`
-   mode; `checkout_payment` puts a signing card in chat where your browser
-   wallet signs the EIP-3009 payload; `checkout_submit` hands the signed
-   payment to the storefront.
-3. The storefront verifies the payment against the order (payee, amount,
-   token, chain) and broadcasts the **authorize**: the buyer's funds are now in
-   on-chain escrow. The order shows `in_escrow`.
+2. On your explicit confirmation `checkout_begin` prices the cart and puts a
+   checkout card in the chat. Your wallet signs in (SIWE), which creates the
+   rail0 payment in `authorize` mode as you — the lines ride in the payment's
+   `metadata` — and then signs the EIP-3009 payload that funds it.
+3. The storefront re-prices what the payment claims to buy against its own
+   catalog, checks it pays the right payee in an accepted token, and broadcasts
+   the **authorize**: the buyer's funds are now in on-chain escrow. The order
+   shows `in_escrow`.
 4. On `/merchant`, fulfil the order: **capture** settles the funds to the
    merchant. Or **void** it: the escrow returns to the buyer.
 
@@ -162,7 +163,8 @@ The pieces a template adopter always touches, and where they live:
 | Landing-page copy | `src/app/page.tsx` |
 | Agent persona & rules | [`agent/instructions.md`](agent/instructions.md) |
 | Chat suggestion chips | `src/app/buyer/page.tsx` |
-| Order store (swap for a real DB) | [`src/lib/store.ts`](src/lib/store.ts) |
+| What an order IS (projected from the payment) | [`src/lib/order-view.ts`](src/lib/order-view.ts) |
+| Pricing and the anti-underpay check | [`src/lib/quote.ts`](src/lib/quote.ts) |
 
 ## Development
 
@@ -197,11 +199,15 @@ snapshot** under `.eve/dev-runtime/snapshots/<id>/source`. Anything the app reso
 relative to `process.cwd()` therefore resolves differently in the two processes — and
 gets a fresh, empty copy after every rebuild.
 
-That is why `bin/dev` exports `STARTER_DATA_DIR` (and `SHOP_URL`): the browser deposits
-checkout signatures through a Next route while the agent's tools read them, and with a
-cwd-relative path those were two different files. The symptom was a checkout stuck on
-*"the sign-in signature has not arrived yet"* with nothing visibly broken. If you start
-the app with a bare `pnpm dev`, set both by hand.
+That is why `bin/dev` exports `SHOP_URL`: the agent's tools call the storefront over
+HTTP, and the fallback they would otherwise use (`http://localhost:4000`) is only right
+when the app happens to be on that port. If you start the app with a bare `pnpm dev`,
+set it by hand.
+
+Nothing else crosses that boundary, which is deliberate — the app keeps no state on
+disk, so there is no file the two processes could disagree about. There used to be
+(`STARTER_DATA_DIR`, for the order store and the signature stash), and getting it wrong
+hung the checkout with nothing visibly broken.
 
 ### After upgrading `eve`
 
@@ -224,17 +230,16 @@ The cure is to discard the stale dev workflow state:
 rm -rf .eve/.workflow-data
 ```
 
-`.eve/` is gitignored scratch, and this only drops eve's own session/turn bookkeeping —
-the order store lives in `.data/store.json` (or Redis) and is untouched.
+`.eve/` is gitignored scratch, and this only drops eve's own session/turn bookkeeping.
+No orders are lost with it: they live on the gateway, as payments.
 
 ## Deploying to Vercel
 
-> **Who may talk to the agent is `agent/channels/eve.ts`.** It is set to `none()` —
-> anonymous — because this is a public demo: there is no account to authenticate, the
-> buyer's key never leaves their browser, and the merchant side is gated separately by
-> `MERCHANT_TOKEN`. **Change that line before the app has real users**, or every session
-> is anonymous and shared. Without the file at all eve is fail-closed and the deployed
-> chat answers `401` to every visitor, which is why it exists.
+> **Who may talk to the agent is `agent/channels/eve.ts`.** It is gated on `BUYER_TOKEN`
+> everywhere except a local dev server: with an agent wallet configured, talking to the
+> agent *is* spending, and the approval that bounds it is answered over this same
+> channel. A deployment without the variable answers `401` to every message — fail-closed
+> on purpose. The merchant side is gated separately by `MERCHANT_TOKEN`.
 
 
 ```bash
@@ -255,8 +260,8 @@ environment; without it, it prints what must be there.
 
 Two things worth knowing before the first deploy:
 
-- **A Redis store is not optional.** Vercel's filesystem is read-only for the app, so the
-  file driver raises `EROFS` at `checkout_begin` and the buyer flow dies at step one.
+- **There is nothing to provision.** No Redis, no KV, no database: the app keeps no state
+  between requests, so Vercel's ephemeral filesystem has nothing to break.
 - **`eve link` pulls AI Gateway credentials that this agent does not use.** `agent.ts`
   builds a direct provider model (`anthropic(...)`), so `ANTHROPIC_API_KEY` is what it
   reads — linking can look like it has supplied model access when it has not.
@@ -265,32 +270,31 @@ Manual equivalent, and what to set up once:
 
 1. Push the repo to GitHub and import it in Vercel (the SDK tarball in
    `vendor/` makes the install self-contained).
-2. Add a Redis store: the file store cannot work on Vercel's ephemeral
-   filesystem, so attach an Upstash Redis (Vercel Marketplace) or set
-   `KV_REST_API_URL` + `KV_REST_API_TOKEN` (also accepted:
-   `UPSTASH_REDIS_REST_URL`/`_TOKEN`). When those are present the order
-   store automatically lives in a single Redis key instead of `.data/`.
-3. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
-   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` (without it the
-   deployed `/merchant` refuses every request — it fails closed, which on a
-   public URL is the only safe default).
-4. Make sure the seller wallet is registered as a payee on that gateway with
+2. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
+   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` and `BUYER_TOKEN`
+   (without those two the deployed `/merchant` and the chat refuse every request —
+   they fail closed, which on a public URL is the only safe default).
+3. Make sure the seller wallet is registered as a payee on that gateway with
    its tokens active and holds gas, and the buyer wallet holds the stablecoin.
 
 ## Notes for a real integration
 
-- **Order store**: a deliberately tiny single-user document store
-  (`.data/store.json` locally, one Redis key on Vercel). Read-modify-write goes
-  through `DocStore.mutate`, which serializes overlapping callers **inside one
-  process** — enough for the order-list refresh, which updates every order at
-  once on each poll, and which used to silently drop the checkout's write-ahead.
-  It is NOT safe across instances (several Vercel lambdas, or the Next app and
-  the agent service on the same Redis key): the whole document is still
-  rewritten, with no compare-and-set. Swap `src/lib/store.ts` for a real
-  database before more than one writer exists. A document that exists and cannot
-  be read (truncated JSON, bad permissions, a corrupt Redis value) is a loud 500
-  naming the file or key — never an empty store, because `mutate` writes what it
-  read straight back and would erase it.
+- **There is no order store, on purpose.** An order IS a rail0 payment: the gateway
+  already records its amount, token, chain, parties, status and every on-chain
+  attempt, and the *lines* ride in the payment's `metadata` (jsonb, 4096 bytes). So
+  the app reads orders back from the gateway and projects them
+  ([`src/lib/order-view.ts`](src/lib/order-view.ts)) instead of keeping a second copy
+  that could disagree — which is what the earlier version's write-ahead, stale flag
+  and reconciliation map all existed to manage. It also means one less thing to
+  provision, and no per-instance state on Vercel.
+
+  The trade is real and worth knowing: the metadata is written by the PAYER, so it is
+  a claim. The merchant prices that claim against its own catalog before authorizing
+  ([`coversCatalogPrice`](src/lib/quote.ts)) — greater-or-equal, because overpaying is
+  the buyer's business and underpaying is the attack. If you need merchant-side data
+  the payment cannot carry (fulfilment, addresses, an internal order number), that is
+  where a real database goes — keyed by `rail0_id`, alongside the payment rather than
+  duplicating it.
 - **The seller key in an env var** is demo-grade: in production it belongs in
   a proper secret store or signer. The buyer side already models the real
   thing — the key stays in the buyer's own wallet, and the gateway never

@@ -1,38 +1,45 @@
-import { randomBytes } from "node:crypto";
 import { buildSiweMessage, Rail0ApiError, Rail0Client, type SigningPayload } from "@rail0/sdk";
 import { agentWalletAddress, signAsAgent } from "./buyer-signer";
-import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
+import type { CartLine, Order, OrderToken } from "./order-view";
 import { packLines } from "./order-view";
-import type { Order } from "./store";
 
-// Buyer-side payment flow, in two shapes over the SAME three steps.
-//
-//   A person buying: the two signatures (the SIWE login and the EIP-3009 payment
-//   authorization) come from their browser wallet, so each step parks a card in the
-//   chat and stops. Three tool calls, two waits.
-//
-//   The agent buying: it holds the key (lib/buyer-signer), so checkoutAsAgent runs
-//   the same three steps back to back with nobody to wait for.
-//
-// Either way the signatures reach the storefront out-of-band, through the signing
-// stash — never through the model's context, where a mangled hex digit would burn the
-// payment.
+/**
+ * The BUYER's side of the checkout: three calls, and nothing kept between them.
+ *
+ * There is no signing stash any more, and the reason is worth stating because it also
+ * explains the shape. The stash existed to carry the buyer's SIWE signature — and with
+ * it their gateway JWT — from the browser to the code that used it, which meant this
+ * server held a credential that can act as the buyer for 24 hours. It is gone because
+ * the step boundaries moved: whoever holds a signature now uses it in the same request.
+ *
+ *   1. quote     — price the cart. Persists nothing, promises nothing.
+ *   2. create    — SIWE message + signature + items, in ONE request: verify, exchange
+ *                  for a session, create the payment carrying the lines in metadata.
+ *   3. submit    — rail0 id + the EIP-3009 signature: sign the payment, hand it to the
+ *                  merchant to escrow.
+ *
+ * A person buying is the browser doing 2 and 3 itself, with the session parked in an
+ * httpOnly cookie between them (the page's JS never reads it). An agent buying is
+ * `checkoutAsAgent` running all three inline, holding the session in a local variable
+ * for the few hundred milliseconds it lives. Same three calls either way.
+ */
 
 // The statement POST /auth requires, verbatim. The gateway asserts it exactly
 // (gateway#147), which is what stops a login proof from being replayed to register
 // a wallet — so this is a protocol constant, not a UI string to reword.
 const SIWE_LOGIN_STATEMENT = "Sign in to RAIL0";
 
-interface PaymentInstructions {
+/** What the storefront answers a quote with — the buyer's view of step 1. */
+export interface CheckoutQuote {
+  lines: CartLine[];
+  /** Human decimal total (e.g. "7.15"). */
+  total: string;
+  /** The same total in the token's base units. */
+  total_base: string;
+  token: OrderToken;
+  /** The merchant's wallet — the payee of the payment about to be created. */
   payee: string;
-  chain_id: number;
-  token: string;
-  /** Human decimal amount (e.g. "5.20") — what the gateway's create expects. */
-  amount: string;
-  /** Same amount in token base units, informative only. */
-  amount_base: string;
-  mode: string;
 }
 
 async function shopFetch<T>(base: string, path: string, init?: RequestInit): Promise<T> {
@@ -85,6 +92,13 @@ export function getShop(base: string) {
           decimals: number;
         }[];
       }>(base, "/api/shop/payment-methods"),
+    /** Step 1. The merchant prices the cart; nothing is created anywhere. */
+    quote: (items: { product_id: string; qty: number }[], chainId: number, tokenAddress: string) =>
+      shopFetch<CheckoutQuote>(base, "/api/shop/quote", {
+        method: "POST",
+        body: JSON.stringify({ items, chain_id: chainId, token_address: tokenAddress }),
+      }),
+    /** An order, by the rail0 payment id that IS its identity. */
     order: (id: string) => shopFetch<{ order: Order }>(base, `/api/shop/orders/${id}`),
     // No `orders()` here on purpose: GET /api/shop/orders is the merchant's
     // order book, gated on the merchant token, and the buyer side holds no such
@@ -100,8 +114,7 @@ function bareClient(): Rail0Client {
 }
 
 /**
- * The exact EIP-4361 text the browser must sign. Built server-side so the nonce
- * comes straight from the gateway.
+ * The exact EIP-4361 text the buyer must sign, with a fresh nonce from the gateway.
  *
  * Delegates to the SDK's builder rather than assembling the text here. The
  * hand-rolled version had reverse-engineered the ruby siwe gem's layout — down to
@@ -110,148 +123,105 @@ function bareClient(): Rail0Client {
  * requires the statement to be `Sign in to RAIL0` and refuses a statement-less
  * message with 422 siwe_purpose_mismatch. Signing the same bytes as every other
  * rail0 client is the point; owning a copy of the format never was.
+ *
+ * The message is the ONLY thing this step produces. It is not secret and nothing has
+ * to remember it: it comes back with the signature in step 2, and the gateway — which
+ * minted the nonce — is what decides whether the pair is good.
  */
-function siweMessage(domain: string, uri: string, address: string, nonce: string): string {
+export async function siweChallenge(buyerAddress: string): Promise<string> {
+  const gateway = env().GATEWAY_URL;
+  const { nonce } = await bareClient().auth.getNonce();
   return buildSiweMessage({
-    domain,
-    address,
-    uri,
+    // hostname, NOT host: the gateway's SIWE domain allow-list holds bare hosts
+    // (Policy.siwe_domains defaults to "localhost"), and it also requires the message's
+    // URI host to equal its domain — a URI host never carries the port, so a domain that
+    // does fails both checks. Both raise SignerMismatch, which surfaces as "the signature
+    // does not match the address": a configuration mismatch wearing a crypto error's
+    // clothes. rail0-cli strips the port for the same reason (siweHost).
+    domain: new URL(gateway).hostname,
+    address: buyerAddress,
+    uri: gateway,
     chainId: env().SIWE_CHAIN_ID,
     nonce,
     statement: SIWE_LOGIN_STATEMENT,
   });
 }
 
-/**
- * Checkout step 1 — create the order and the SIWE challenge.
- *
- * `buyerAddress` comes from the connected browser wallet (checksummed there;
- * the gateway's SIWE parser rejects a lowercase address). Returns the exact
- * message the browser must personal_sign; everything the later steps need is
- * parked in the signing stash, keyed by the order.
- *
- * It also mints the checkout's `deposit_nonce` — the secret the browser has to
- * present when it posts a signature back. This is the only place it is created,
- * because this is the only place an entry is created: it goes into the stash and
- * out with the returned step, and every later step reads it from the stash rather
- * than making a second one.
- */
-export async function beginCheckout(
-  base: string,
-  items: { product_id: string; qty: number }[],
-  chainId: number,
-  tokenAddress: string,
-  buyerAddress: string,
-): Promise<{
-  order: Order;
-  siwe_message: string;
-  deposit_nonce: string;
-  instructions: PaymentInstructions;
-}> {
-  const { order, payment_instructions } = await shopFetch<{
-    order: Order;
-    payment_instructions: PaymentInstructions;
-  }>(base, "/api/shop/orders", {
-    method: "POST",
-    body: JSON.stringify({ items, chain_id: chainId, token_address: tokenAddress }),
-  });
-
-  const gateway = env().GATEWAY_URL;
-  const { nonce } = await bareClient().auth.getNonce();
-  // hostname, NOT host: the gateway's SIWE domain allow-list holds bare hosts
-  // (Policy.siwe_domains defaults to "localhost"), and it also requires the message's
-  // URI host to equal its domain — a URI host never carries the port, so a domain that
-  // does fails both checks. Both raise SignerMismatch, which surfaces as "the signature
-  // does not match the address": a configuration mismatch wearing a crypto error's
-  // clothes. rail0-cli strips the port for the same reason (siweHost).
-  const message = siweMessage(new URL(gateway).hostname, gateway, buyerAddress, nonce);
-
-  // 32 bytes: the drop-box's whole gate, so it has to be unguessable in a way an
-  // 8-hex order id never was.
-  const depositNonce = randomBytes(32).toString("hex");
-
-  await putSigning(order.id, {
-    address: buyerAddress,
-    siwe_message: message,
-    deposit_nonce: depositNonce,
-  });
-  return {
-    order,
-    siwe_message: message,
-    deposit_nonce: depositNonce,
-    instructions: payment_instructions,
-  };
+export interface CreatedPayment {
+  rail0_id: string;
+  signing_payload: SigningPayload;
+  /** The buyer's gateway session — the caller decides where it lives until step 3. */
+  auth_token: string;
+  /** ISO expiry of that session, for the cookie's lifetime. */
+  expires_at: string;
+  quote: CheckoutQuote;
 }
 
 /**
- * Checkout step 2 — trade the browser's SIWE signature for a buyer session and
- * create the rail0 payment as that payer. Returns the EIP-712 payload the
- * browser must sign next (eth_signTypedData_v4 / the SDK's signPayment).
+ * Checkout step 2 — one request: prove who the buyer is, and create their payment.
+ *
+ * The two used to be separate steps with the SIWE signature parked in between, and
+ * that gap was the whole reason a stash existed. They are one call because they cannot
+ * be anything else: the gateway requires the PAYER to be the caller, so the session the
+ * signature buys is the only thing that can create this payment, and neither half is
+ * useful without the other.
+ *
+ * The cart is re-quoted here rather than trusted from the client: the amount created is
+ * the merchant's own price for the items, so a tampered total is not even expressible.
+ * The lines then ride into the payment's `metadata` — the record of WHAT was bought,
+ * which the gateway keeps and this app no longer has to.
  */
-export async function createPaymentForOrder(
-  base: string,
-  orderId: string,
-): Promise<{ rail0_id: string; signing_payload: SigningPayload; deposit_nonce: string }> {
-  const entry = await getSigning(orderId);
-  if (!entry) throw new Error(`no checkout in progress for order ${orderId}`);
-  if (!entry.siwe_signature) {
-    throw new Error("the sign-in signature has not arrived yet — ask the user to sign first");
-  }
-
-  const order = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}`).then(
-    (r) => r.order,
-  );
+export async function createPayment(input: {
+  base: string;
+  items: { product_id: string; qty: number }[];
+  chainId: number;
+  tokenAddress: string;
+  siweMessage: string;
+  siweSignature: string;
+}): Promise<CreatedPayment> {
+  const quote = await getShop(input.base).quote(input.items, input.chainId, input.tokenAddress);
 
   const client = bareClient();
-  // The SIWE nonce is SINGLE-USE, so auth.verify can only ever run once per checkout.
-  // Reuse the token from a previous attempt when there is one: this tool is re-run
-  // whenever anything after it failed (a network blip at payments.create, the browser
-  // losing the dev server, the agent retrying the step), and re-verifying then burns
-  // the flow with 422 nonce_used — "Sign-in nonce already used" — which reads as a
-  // security complaint rather than "this step already ran".
-  let authToken = entry.auth_token;
-  if (!authToken) {
-    const auth = await client.auth.verify(entry.siwe_message, entry.siwe_signature);
-    authToken = auth.token;
-    // Persisted BEFORE anything else can fail. It used to be stored only after
-    // payments.create succeeded, so a failure in between lost the token AND left the
-    // nonce spent: the order could never be paid, by any retry, and the only way out
-    // was a brand-new checkout.
-    await putSigning(orderId, { auth_token: authToken });
-  }
-  client.setAuthToken(authToken);
+  const auth = await client.auth.verify(input.siweMessage, input.siweSignature);
+  client.setAuthToken(auth.token);
 
   const payment = await client.payments.create({
-    chain_id: order.token.chain_id,
+    chain_id: quote.token.chain_id,
     mode: "authorize",
-    amount: order.total,
-    token: order.token.address,
-    payer: entry.address,
-    payee: (await shopFetch<{ merchant: { address: string } }>(base, "/api/shop/products")).merchant
-      .address,
-    description: `rail0-starter order ${orderId}`,
-    // The ORDER travels with the payment, not just a pointer to it. The gateway is
-    // becoming the record — an order is a payment — so the lines have to be somewhere
-    // the gateway keeps, and `metadata` is that place (jsonb, 4096 bytes). The order
-    // id stays alongside for as long as a local order still exists.
+    amount: quote.total,
+    token: quote.token.address,
+    // The address the GATEWAY recovered from the signature, not one the caller supplied:
+    // the payer is whoever proved they hold the key, and nothing else gets a say.
+    payer: auth.address,
+    payee: quote.payee,
+    description: describe(quote.lines),
+    // The ORDER travels with the payment, because the payment IS the order now. The
+    // gateway keeps `metadata` (jsonb, 4096 bytes) and that is where the lines live.
     //
-    // It is written by the PAYER, so it is a claim rather than a merchant record:
-    // shop.ts prices it against the catalog before authorizing (coversCatalogPrice).
-    metadata: { order_id: orderId, ...packLines(order.lines) },
+    // Written by the PAYER, so it is a claim rather than a merchant record: the
+    // storefront prices it against its own catalog before authorizing the escrow
+    // (shop.ts, coversCatalogPrice).
+    metadata: packLines(quote.lines),
   });
 
   if (!payment.signing_payload) {
     throw new Error("gateway returned no signing payload for the new payment");
   }
-  await putSigning(orderId, { rail0_id: payment.rail0_id });
-  // The SAME nonce step 1 minted, read back from the stash: this step's card has to
-  // deposit the EIP-3009 signature too, and a fresh nonce here would invalidate the
-  // one the login card is still holding.
   return {
     rail0_id: payment.rail0_id,
     signing_payload: payment.signing_payload,
-    deposit_nonce: entry.deposit_nonce,
+    auth_token: auth.token,
+    expires_at: auth.expiresAt,
+    quote,
   };
+}
+
+/** A one-line description of the cart, for anyone reading the payment on the gateway. */
+function describe(lines: readonly CartLine[]): string {
+  const summary = lines.map((line) => `${line.qty}× ${line.name}`).join(", ");
+  // The gateway's description column is not unbounded, and a 40-line cart would be a
+  // wall of text in the admin either way. The metadata holds the authoritative list.
+  return `rail0-starter: ${summary}`.slice(0, 200);
 }
 
 /**
@@ -270,85 +240,62 @@ export function isAlreadySigned(error: unknown): boolean {
 }
 
 /**
- * Checkout step 3 — attach the browser's EIP-3009 signature and hand the
- * signed payment to the storefront, which verifies it and broadcasts the
- * authorize. Tolerates a replay: if the order already moved past
- * awaiting_payment, it just reports the current state.
+ * Checkout step 3 — attach the payer's EIP-3009 signature and have the merchant
+ * escrow it.
  *
- * IDEMPOTENT, like step 2's auth-token reuse, and for a worse failure. `sign`
- * used to run unconditionally: if it succeeded and the attach POST after it did
- * not (a network blip, the dev server restarting, the agent retrying the step),
- * the order stayed `awaiting_payment` — so the early return below never fired —
- * and every retry re-signed, took 422 already_signed, and died BEFORE the
- * attach. The payment was signed, the order was stuck for good, and no retry
- * could ever move it. So the payment's own status decides whether to sign, and
- * an already_signed race is treated as "already signed, carry on".
+ * IDEMPOTENT in both halves, and both were bugs once. The gateway is asked for the
+ * payment's status rather than assuming this is the first attempt: `unsigned` is the
+ * only status from which signing is still owed, and an already_signed race is treated
+ * as "already signed, carry on". The merchant's authorize is idempotent for the same
+ * reason (shop.ts), so a retry after a lost response reports the escrow rather than
+ * refusing it.
  */
-export async function submitSignedPayment(
-  base: string,
-  orderId: string,
-): Promise<{ order: Order; rail0_id: string }> {
-  const entry = await getSigning(orderId);
-  if (!entry?.rail0_id) throw new Error(`no payment created yet for order ${orderId}`);
-  if (!entry.eip3009_signature) {
-    throw new Error("the payment signature has not arrived yet — ask the user to sign first");
-  }
-
-  // Over HTTP, not the merchant's store directly: the storefront is a separate
-  // deployable, so a local read here saw an empty store (and therefore no order)
-  // in exactly the split this file's boundary exists for. The GET also refreshes
-  // the order from the gateway, so what it answers is live.
-  const current = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}`).then(
-    (r) => r.order,
-  );
-  if (current.state !== "awaiting_payment") {
-    return { order: current, rail0_id: entry.rail0_id };
-  }
-
+export async function submitPayment(input: {
+  base: string;
+  rail0Id: string;
+  signature: string;
+  authToken: string;
+}): Promise<{ order: Order; rail0_id: string }> {
   const client = bareClient();
-  if (!entry.auth_token) throw new Error("buyer session expired — restart the checkout");
-  client.setAuthToken(entry.auth_token);
+  client.setAuthToken(input.authToken);
 
-  // The gateway is the authority on whether the signature landed — not the local
-  // stash, which the split deployment above makes unreliable. `unsigned` is the
-  // only status from which signing is still owed; anything later (signed,
-  // authorized, …) means it happened, and the attach is what is missing.
-  const payment = await client.payments.get(entry.rail0_id);
+  const payment = await client.payments.get(input.rail0Id);
   if (payment.status === "unsigned") {
     try {
-      await client.payments.sign(entry.rail0_id, { signature: entry.eip3009_signature });
+      await client.payments.sign(input.rail0Id, { signature: input.signature });
     } catch (error) {
       // A concurrent retry can sign between the read above and this call.
       if (!isAlreadySigned(error)) throw error;
     }
   }
 
-  const attached = await shopFetch<{ order: Order }>(base, `/api/shop/orders/${orderId}/payment`, {
-    method: "POST",
-    body: JSON.stringify({ rail0_id: entry.rail0_id }),
-  });
-
-  await clearSigning(orderId);
-  return { order: attached.order, rail0_id: entry.rail0_id };
+  // Over HTTP, not by calling shop.ts directly: the storefront is a separate deployable
+  // from the buyer side, and this is the boundary between them. It is also the only
+  // place the merchant's own key signs, which is exactly where that split belongs.
+  const { order } = await shopFetch<{ order: Order }>(
+    input.base,
+    `/api/shop/payments/${input.rail0Id}/authorize`,
+    { method: "POST" },
+  );
+  return { order, rail0_id: input.rail0Id };
 }
 
 /**
  * The whole checkout, start to finish, signed by the AGENT'S OWN WALLET.
  *
- * This is the same three steps as the browser flow — it calls them, rather than
- * reimplementing them, so every hard-won behaviour they carry (the single-use SIWE
- * nonce, the auth-token reuse on retry, the idempotent sign, the write-ahead) applies
- * here unchanged. The only difference is who produces the two signatures and when: the
- * browser path parks a card in the chat and waits for a human, and this one signs
- * inline and keeps going.
+ * The same three calls as the browser flow — it calls them rather than reimplementing
+ * them, so every behaviour they carry (the merchant-priced amount, the idempotent sign,
+ * the idempotent authorize) applies here unchanged. The only difference is who produces
+ * the two signatures and when: the browser path parks a card in the chat and waits for a
+ * human, and this one signs inline and keeps going.
  *
- * It writes the signatures into the same stash the browser posts to, for the same
- * reason: the later steps read them from there, and giving them a second source would
- * be two ways to be in the same state.
+ * The buyer session never leaves this function — no cookie, no store, no stash. That is
+ * what the rewrite bought: the autonomous path holds the credential for the length of
+ * one function call, and the browser path holds it in the buyer's own cookie jar.
  *
  * The caller decides WHETHER to run this — that decision is a spending decision (see
- * lib/agent-budget), not a mechanical one, and it belongs with the tool that has
- * the cart and the approval policy.
+ * lib/agent-budget), not a mechanical one, and it belongs with the tool that has the
+ * cart and the approval policy.
  */
 export async function checkoutAsAgent(
   base: string,
@@ -359,15 +306,20 @@ export async function checkoutAsAgent(
   const address = agentWalletAddress();
   if (!address) throw new Error("no agent wallet configured");
 
-  const begun = await beginCheckout(base, items, chainId, tokenAddress, address);
-  await putSigning(begun.order.id, {
-    siwe_signature: signAsAgent({ kind: "message", message: begun.siwe_message }),
+  const siweMessage = await siweChallenge(address);
+  const created = await createPayment({
+    base,
+    items,
+    chainId,
+    tokenAddress,
+    siweMessage,
+    siweSignature: signAsAgent({ kind: "message", message: siweMessage }),
   });
 
-  const created = await createPaymentForOrder(base, begun.order.id);
-  await putSigning(begun.order.id, {
-    eip3009_signature: signAsAgent({ kind: "typed_data", payload: created.signing_payload }),
+  return await submitPayment({
+    base,
+    rail0Id: created.rail0_id,
+    signature: signAsAgent({ kind: "typed_data", payload: created.signing_payload }),
+    authToken: created.auth_token,
   });
-
-  return await submitSignedPayment(base, begun.order.id);
 }

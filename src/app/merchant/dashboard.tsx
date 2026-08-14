@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
-import type { Order } from "@/lib/store";
 import { CopyableId, StateBadge } from "../ui";
 
 /**
@@ -196,7 +196,10 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
               className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-sm font-semibold">#{order.id}</span>
+                {/* The order id IS the rail0 payment id — 66 characters of it — so it
+                    is shown truncated and copies in full on click, rather than printed
+                    raw across the row. */}
+                <CopyableId value={order.id} />
                 <StateBadge state={order.state} />
                 <span className="ml-auto text-sm font-semibold">
                   {order.total} {order.token.symbol}
@@ -207,7 +210,6 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
                 {order.token.chain_name && <span>{order.token.chain_name}</span>}
-                {order.rail0_id && <CopyableId value={order.rail0_id} />}
                 {order.payment_status && <span>payment: {order.payment_status}</span>}
                 {order.error && <span className="text-red-500">{order.error}</span>}
               </div>
