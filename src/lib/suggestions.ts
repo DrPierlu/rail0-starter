@@ -13,8 +13,10 @@
  *   add_to_cart / view_cart, payment_options, my_orders, order_status.
  *
  *   Truthful about catalog.json. The prices below sit inside the catalog's real
- *   range (1.01 to 9.91) and name categories it really carries, so a
- *   price-bounded or category-bounded chip never comes back empty.
+ *   range (0.45 to 2.95) and name categories it really carries, so a
+ *   price-bounded or category-bounded chip never comes back empty — and, just as
+ *   important, never comes back with EVERYTHING, which is what "under $10" would
+ *   do to a catalog whose dearest coat is under three.
  */
 export const SUGGESTIONS: readonly string[] = [
   // Browsing — the widest opening, and the one that shows the catalog exists.
@@ -22,13 +24,13 @@ export const SUGGESTIONS: readonly string[] = [
   "What categories do you carry?",
   "What's the cheapest thing you sell?",
   // Bounded searches. Every bound here has matches in catalog.json.
-  "Find me a t-shirt under $3",
-  "I need a hoodie under $5",
+  "Find me a t-shirt under $1",
+  "I need a hoodie under $2",
   "Show me the jackets",
   "What jeans do you have?",
-  "Something warm for under $10",
+  "Something warm for under $2.50",
   // Cart building — the step between browsing and checkout.
-  "Put together an outfit under $20",
+  "Put together an outfit under $8",
   "Add a beanie and a pair of socks to my cart",
   "What's in my cart?",
   // Payment and escrow: the point of the demo, asked in the shopper's words.
