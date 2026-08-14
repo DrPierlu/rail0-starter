@@ -16,9 +16,57 @@ import { CopyableId, StateBadge } from "../ui";
  */
 const POLL_MS = 5000;
 
+/**
+ * How many orders the dashboard opens with, and how many more each click adds.
+ *
+ * Ten because the list is polled: every tick is a gateway page, and a shop with a
+ * thousand orders would fetch all of them every five seconds to show the handful anyone
+ * is actually looking at. Growing the window rather than paging keeps the poll simple —
+ * there is one request and one list, just a longer one.
+ */
+const PAGE = 10;
+
+/**
+ * The submitted-action map, narrowed to the orders the list still calls escrowed.
+ *
+ * This is what releases the buttons again, and it deliberately trusts the ORDER rather
+ * than the response that started the action: a capture is only really over when the
+ * gateway stops describing the payment as authorized. A timer would have to guess, and
+ * the number it would guess is the chain's finality — eleven minutes on the slowest one
+ * here.
+ *
+ * Returns the same object when nothing was dropped, so the five-second poll does not
+ * re-render the whole list to say nothing changed.
+ */
+export function keepEscrowed<T>(
+  submitted: Record<string, T>,
+  orders: readonly { id: string; state: Order["state"] }[],
+): Record<string, T> {
+  const escrowed = new Set(orders.filter((o) => o.state === "in_escrow").map((o) => o.id));
+  const kept = Object.entries(submitted).filter(([id]) => escrowed.has(id));
+  return kept.length === Object.keys(submitted).length ? submitted : Object.fromEntries(kept);
+}
+
 export function MerchantDashboard({ devToken }: { devToken?: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
+  // How many the gateway is asked for, and how many it says exist. The second is the
+  // gateway's own count, so "show more" appears exactly when there is more.
+  const [limit, setLimit] = useState(PAGE);
+  const [total, setTotal] = useState(0);
   const [acting, setActing] = useState<string | null>(null);
+  /**
+   * Orders whose capture or void the storefront has ACCEPTED, until the list stops
+   * calling them escrowed.
+   *
+   * `acting` alone only covers the request itself, and that is not the window that
+   * matters. A capture answers 202 the moment it is broadcast, and the list read that
+   * follows still says `in_escrow` — the order book comes from `GET /payments`, which
+   * carries no transactions, so a capture being mined is indistinguishable from one
+   * never started. The buttons came back, enabled, on real escrowed funds, and the
+   * only thing standing between a second click and a second broadcast was the 409 the
+   * route happens to answer.
+   */
+  const [submitted, setSubmitted] = useState<Record<string, "capture" | "void">>({});
   // Void is the destructive one (it hands the escrow back), so the button
   // asks for a second click instead of firing immediately.
   const [confirmingVoid, setConfirmingVoid] = useState<string | null>(null);
@@ -36,10 +84,16 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/shop/orders");
+      const res = await fetch(`/api/shop/orders?limit=${limit}`);
       const body = await res.json();
       if (res.ok) {
         setOrders(body.orders);
+        setTotal(typeof body.total === "number" ? body.total : body.orders.length);
+        // Forget a submitted action once its order is no longer escrowed — the
+        // operation landed (or failed, or someone else moved it), and either way the
+        // buttons this was holding down are not rendered any more. An order that has
+        // dropped off the list entirely goes with it.
+        setSubmitted((current) => keepEscrowed(current, body.orders as Order[]));
         setSignedOut(false);
         setError(null);
       } else if (res.status === 401) {
@@ -56,7 +110,9 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
     } catch {
       setError("failed to load orders");
     }
-  }, []);
+    // Re-made when the window grows, which is what re-arms the poll on the new size —
+    // otherwise "show 10 more" would show them once and the next tick would drop them.
+  }, [limit]);
 
   // Sign in with the token from the server's env: the cookie the route sets is
   // httpOnly, so every later fetch on this page carries it without the page
@@ -108,6 +164,11 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
       });
       const body = await res.json();
       if (res.ok) {
+        // Before the refresh, not after: the refresh is what re-renders the row, and
+        // it must find the action already recorded or the buttons flash back for a
+        // frame. Only on success — a 409 or a 422 means nothing was broadcast, so the
+        // merchant must be able to try again.
+        setSubmitted((current) => ({ ...current, [orderId]: action }));
         await refresh();
       } else {
         // Set the message and DON'T refresh. refresh()'s success branch calls
@@ -213,7 +274,23 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                 {order.payment_status && <span>payment: {order.payment_status}</span>}
                 {order.error && <span className="text-red-500">{order.error}</span>}
               </div>
-              {order.state === "in_escrow" && (
+              {order.state === "in_escrow" && submitted[order.id] && (
+                // One disabled control saying what is happening, rather than two greyed
+                // ones that look like a page that has stopped working. It stays until
+                // the gateway's own list agrees the order has moved on, which on a slow
+                // chain is a couple of minutes.
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-lg bg-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-500 dark:bg-neutral-800"
+                  >
+                    <span className="mr-1.5 inline-block size-1.5 animate-pulse rounded-full bg-amber-500 align-middle" />
+                    {submitted[order.id] === "capture" ? "Capturing…" : "Voiding…"}
+                  </button>
+                </div>
+              )}
+              {order.state === "in_escrow" && !submitted[order.id] && (
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
@@ -221,7 +298,7 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                     onClick={() => act(order.id, "capture")}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                   >
-                    Fulfil & capture
+                    {acting === order.id ? "Submitting…" : "Fulfil & capture"}
                   </button>
                   {confirmingVoid === order.id ? (
                     <>
@@ -231,12 +308,13 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                         onClick={() => act(order.id, "void")}
                         className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                       >
-                        Confirm void — return the escrow
+                        {acting === order.id ? "Submitting…" : "Confirm void — return the escrow"}
                       </button>
                       <button
                         type="button"
+                        disabled={acting === order.id}
                         onClick={() => setConfirmingVoid(null)}
-                        className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                        className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
                       >
                         Keep the order
                       </button>
@@ -255,6 +333,24 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
               )}
             </div>
           ))}
+          {/* Against the gateway's own count, not against what arrived: a page of ten
+              that returned ten says nothing about whether an eleventh exists, and a
+              payment in a token the merchant no longer accepts is dropped on the way
+              through (see readOrders), so the two numbers legitimately differ. */}
+          {total > limit && (
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => setLimit((current) => current + PAGE)}
+                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                Show {Math.min(PAGE, total - limit)} more
+              </button>
+              <p className="mt-1.5 text-[11px] text-neutral-400">
+                showing {orders.length} of {total}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </main>
