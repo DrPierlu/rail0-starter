@@ -51,14 +51,111 @@ export default function BuyerPage() {
   // different … session"): a new store reads sessionStorage again, finds it cleared, and
   // gets initialSession: undefined.
   const [epoch, setEpoch] = useState(0);
+  // Whether this visitor may talk to the agent at all. Undefined until asked, so the
+  // page shows neither the chat nor a sign-in form while it does not know — a form
+  // that flashes and vanishes reads as a bug.
+  const [allowed, setAllowed] = useState<boolean | undefined>(undefined);
   useEffect(() => setMounted(true), []);
-  if (!mounted) {
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/buyer/session");
+        const body = (await res.json()) as { signed_in?: boolean; required?: boolean };
+        // Not required is the local dev server, where eve's own localDev() opens the
+        // channel: asking for a token there would gate a chat that works.
+        if (!cancelled) setAllowed(body.required === false || body.signed_in === true);
+      } catch {
+        // Unreachable route: assume a sign-in is needed rather than dropping the
+        // visitor into a chat whose first message would 401 with no explanation.
+        if (!cancelled) setAllowed(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!mounted || allowed === undefined) {
     return <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4" />;
   }
+  if (!allowed) return <BuyerSignIn onSignedIn={() => setAllowed(true)} />;
   return (
     <WalletProvider>
       <EveChat key={epoch} onNewConversation={() => setEpoch((e) => e + 1)} />
     </WalletProvider>
+  );
+}
+
+/**
+ * The chat's sign-in.
+ *
+ * The agent can spend when the deployment holds a wallet, and the approval that gates
+ * that spending is answered over the same channel — so this is not decoration in front
+ * of a demo. It asks for BUYER_TOKEN and the server puts it in an httpOnly cookie; the
+ * page never holds the credential after the submit.
+ */
+function BuyerSignIn({ onSignedIn }: { onSignedIn: () => void }) {
+  const [token, setToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/buyer/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        // Keeps the server's message: the 500 that names an unset BUYER_TOKEN is the
+        // one worth reading, and no amount of retyping would fix it.
+        setError(body.error ?? "sign-in failed");
+        return;
+      }
+      setToken("");
+      onSignedIn();
+    } catch {
+      setError("sign-in failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <main className="mx-auto max-w-sm px-4 py-20">
+      <h1 className="text-lg font-semibold">Sign in to the agent</h1>
+      <p className="mt-2 text-sm text-neutral-500">
+        The value of <code className="font-mono">BUYER_TOKEN</code> on the server. The agent can pay
+        from this deployment&apos;s wallet, so the chat is gated on it.
+      </p>
+      <form onSubmit={submit} className="mt-6">
+        <label htmlFor="buyer-token" className="sr-only">
+          Buyer token
+        </label>
+        <input
+          id="buyer-token"
+          type="password"
+          autoComplete="off"
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+          className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm dark:border-neutral-700 dark:bg-neutral-950"
+        />
+        <button
+          type="submit"
+          disabled={busy || token.length === 0}
+          className="mt-3 w-full rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
+        >
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+      {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+    </main>
   );
 }
 

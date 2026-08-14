@@ -44,6 +44,12 @@ const schema = z.object({
   // to run at all — a schema-level requirement would take the whole app down
   // instead of just the surface the token protects.
   MERCHANT_TOKEN: z.string().min(1).optional(),
+  // Who may talk to the AGENT. Optional here and required by the gate that reads
+  // it (lib/buyer-auth), like MERCHANT_TOKEN: `eve dev` needs none, and a
+  // deployment without one refuses every chat request rather than admitting
+  // everyone. See agent/channels/eve.ts for why an open channel stopped being
+  // defensible once a deployment could hold a wallet.
+  BUYER_TOKEN: z.string().min(1).optional(),
 });
 
 type Env = z.infer<typeof schema>;
@@ -64,6 +70,7 @@ export function env(): Env {
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
       MERCHANT_TOKEN: process.env.MERCHANT_TOKEN || undefined,
+      BUYER_TOKEN: process.env.BUYER_TOKEN || undefined,
     });
     if (!parsed.success) {
       const detail = parsed.error.issues
