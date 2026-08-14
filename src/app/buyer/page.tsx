@@ -5,18 +5,12 @@ import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { type CheckoutEvent, pendingSignature } from "@/lib/checkout-step";
+import { pickSuggestions } from "@/lib/suggestions";
 import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
 import { asSigningOutput, signingKey } from "./signing-card";
 import { orderCardOrderId } from "./tool-views";
 import { useWallet, WalletChip, WalletProvider } from "./wallet";
-
-const SUGGESTIONS = [
-  "What's in the store?",
-  "Find me a t-shirt under $3",
-  "How can I pay?",
-  "Show my orders",
-];
 
 // Where the conversation is parked while this page is unmounted (a hop to
 // /merchant and back, a reload). The eve session itself is durable on the
@@ -71,6 +65,17 @@ export default function BuyerPage() {
 function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   const [input, setInput] = useState("");
   const [saved] = useState<SavedChat>(loadSaved);
+  // Four prompts drawn fresh from the pool on every mount, so the empty chat does not
+  // always open with the same four. In a lazy useState initializer, NOT at module
+  // scope: module scope evaluates once per page load and would freeze the row for the
+  // whole session, and "New conversation" remounts this component (see the `epoch` key
+  // above), so the draw follows a reset for free. Re-rendering must not reshuffle
+  // either — chips moving under a cursor about to click one is its own bug.
+  //
+  // Math.random() during render is safe here only because this component is
+  // client-only: BuyerPage renders an empty shell until `mounted`, so EveChat never
+  // renders on the server and there is no markup for the client to disagree with.
+  const [suggestions] = useState(() => pickSuggestions(4));
   const { wallet } = useWallet();
   // Signing steps already signed in this tab. The docked box needs it to know when to
   // let go, and the transcript copies need it to render as done rather than offering a
@@ -271,7 +276,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
               order.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
