@@ -77,11 +77,11 @@ a rail0 gateway to talk to, and an Anthropic API key.
    `http://localhost:9292`), or point `GATEWAY_URL` at a deployed gateway.
 
 2. **Wallets.**
-   - The **buyer** wallet connects in the browser at checkout (MetaMask), or
-     comes from `BUYER_PRIVATE_KEY` in `.env.local` when you want to demo
-     without an extension — that one is local-development only. It needs the
-     payment stablecoin (e.g. USDC) on the target testnet — EIP-3009 transfers
-     are gasless for the buyer.
+   - The **buyer** wallet connects in the browser at checkout (MetaMask). Set
+     `BUYER_PRIVATE_KEY` instead and there is no browser buyer at all: the agent
+     buys as itself, within the ceilings above. Either way it needs the payment
+     stablecoin (e.g. USDC) on the target testnet — EIP-3009 transfers are
+     gasless for the buyer.
    - The **seller** wallet must be registered as a payee wallet on the
      gateway, with the stablecoins it accepts activated, and needs native gas
      for authorize/capture/void transactions. Its key goes in
