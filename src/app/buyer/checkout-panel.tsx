@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CHECKOUT_STEPS,
   type CheckoutStep,
@@ -9,8 +9,8 @@ import {
   STEP_LABELS,
   stepIndex,
 } from "@/lib/checkout-step";
-import { TERMINAL_STATES } from "@/lib/order-ui";
-import type { Order } from "@/lib/order-view";
+import { shortId, TERMINAL_STATES } from "@/lib/order-ui";
+import type { Order, OrderState } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
 import { CheckoutCard, type CheckoutOutput, type CheckoutStage } from "./checkout-card";
 import { OrderCard } from "./order-card";
@@ -91,6 +91,33 @@ export function CheckoutPanel({
     };
   }, [activeOrderId, state]);
 
+  // Every outcome already announced, so a state is reported once and not on every poll.
+  const announcedRef = useRef<Set<string>>(new Set());
+
+  /**
+   * Tell the agent when the payment reaches an outcome, so the SHOPPER is told.
+   *
+   * The escrow confirms minutes after the card finishes, and until now nothing said so:
+   * the panel's badge changed colour and the conversation simply stopped. The agent
+   * cannot notice on its own — it has no clock and no way to wake up — so the page,
+   * which is already polling, hands it the fact and it does the talking.
+   *
+   * Only for a checkout THIS tab ran (`cardOrderId`), and only once per state: an order
+   * the transcript merely mentions could already be settled when the page loads, and
+   * announcing that on every reload would be a bot telling you news you have had for
+   * days. Held back while the agent is busy — the effect re-runs when it stops, so the
+   * announcement waits rather than being dropped or colliding with a turn in flight.
+   */
+  useEffect(() => {
+    if (!order || !cardOrderId || order.id !== cardOrderId || busy) return;
+    const announce = OUTCOMES[order.state];
+    if (!announce) return;
+    const key = `${order.id}:${order.state}`;
+    if (announcedRef.current.has(key)) return;
+    announcedRef.current.add(key);
+    onContinue(announce(order));
+  }, [order, cardOrderId, busy, onContinue]);
+
   // The order in state may be a previous one for a tick after the id changes; only
   // trust its state when it is the order the panel is actually about.
   const step =
@@ -130,6 +157,33 @@ export function CheckoutPanel({
     </div>
   );
 }
+
+/**
+ * What the agent is told when an order reaches an outcome, and nothing for the states
+ * that are still in motion — `authorizing` is not news, it is the wait itself.
+ *
+ * Phrased as a report from the app rather than as the shopper talking, with the prefix
+ * the instructions key on: the agent has to be able to tell "this is a fact to pass on"
+ * from "the shopper said something", because the two want different replies.
+ *
+ * The amount comes from `order.total`, which is two decimals whatever the chain's token
+ * precision is (see order-view). What the shopper reads should not depend on how many
+ * places USDC happens to use.
+ */
+const OUTCOMES: Partial<Record<OrderState, (order: Order) => string>> = {
+  in_escrow: (o) =>
+    `Update from the storefront: order ${shortId(o.id)} is confirmed on-chain — ` +
+    `${o.total} ${o.token.symbol} is now held in escrow.`,
+  settled: (o) =>
+    `Update from the storefront: order ${shortId(o.id)} has been captured by the merchant — ` +
+    `the payment of ${o.total} ${o.token.symbol} is complete.`,
+  cancelled: (o) =>
+    `Update from the storefront: order ${shortId(o.id)} was cancelled — ` +
+    `the ${o.total} ${o.token.symbol} in escrow went back to my wallet.`,
+  failed: (o) =>
+    `Update from the storefront: order ${shortId(o.id)} failed on-chain` +
+    `${o.error ? ` (${o.error})` : ""}. No funds were captured.`,
+};
 
 /**
  * The signature the card is waiting for at each stage — including the two stages where
