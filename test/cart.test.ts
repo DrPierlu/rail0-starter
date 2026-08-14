@@ -77,7 +77,7 @@ describe("cartTotal", () => {
 
   it("reports a price it cannot read as unusable, not as zero", () => {
     // The caller compares this against the spending ceiling. A broken catalog price
-    // must not read as a free order — "NaN" fails withinAutonomousLimit, which sends
+    // must not read as a free order — "NaN" fails withinBudget, which sends
     // the checkout to a human.
     expect(cartTotal([priced("2.60", 1), priced("free", 1)])).toBe("NaN");
   });

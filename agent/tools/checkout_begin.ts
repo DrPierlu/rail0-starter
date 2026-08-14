@@ -1,11 +1,8 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { beginCheckout, checkoutAsAgent } from "../../src/lib/buyer";
-import {
-  agentWalletAddress,
-  autonomousOrderLimit,
-  withinAutonomousLimit,
-} from "../../src/lib/buyer-signer";
+import { budgetPolicy, spentInWindow, withinBudget } from "../../src/lib/agent-budget";
+import { beginCheckout, checkoutAsAgent, getShop } from "../../src/lib/buyer";
+import { agentWalletAddress } from "../../src/lib/buyer-signer";
 import { shopBase } from "../lib/base";
 import { cartTotal, getCart } from "../lib/cart";
 import { rememberOrder } from "../lib/orders";
@@ -36,16 +33,49 @@ export default defineTool({
   // spending is exactly the wrong default. Anything unexpected — a cart that cannot be
   // read, a total that will not parse — asks, because the safe answer to "how much is
   // this?" being unavailable is not "go ahead".
-  async approval() {
+  // `ctx`, not a destructured `{ toolInput }`: destructuring happens in the parameter
+  // list, BEFORE the try below, so an unexpected call shape would throw past every
+  // guard in here — and this policy's whole contract is that it answers rather than
+  // raising. Read defensively inside.
+  async approval(ctx) {
     try {
+      const toolInput = ctx?.toolInput;
       // Inside the try, not before it: reading the wallet parses the whole environment
       // schema, so a deployment missing an unrelated variable would throw here — and an
       // approval policy that throws is not a policy. Everything unreadable lands on the
       // same answer, which is to ask.
       if (!agentWalletAddress()) return "user-approval";
-      return withinAutonomousLimit(cartTotal(await getCart()), autonomousOrderLimit())
-        ? "approved"
-        : "user-approval";
+
+      const orderTotal = cartTotal(await getCart());
+      const policy = budgetPolicy();
+
+      // Per-order first, and without touching the network: a cart over that ceiling is
+      // going to a human whatever the window says, so the gateway read below is work
+      // nobody needs.
+      if (!withinBudget({ orderTotal, spent: "0", perOrder: policy.perOrder, perWindow: 0 })) {
+        return "user-approval";
+      }
+      if (policy.perWindow === 0) return "approved";
+
+      // The window ceiling needs the gateway's own record of what this wallet has
+      // already paid — see lib/agent-budget for why nothing is counted locally. It is
+      // asked per token, so the decimals come from the same catalogue the checkout
+      // pays with.
+      const methods = await getShop(shopBase()).paymentMethods();
+      const method = methods.payment_methods.find(
+        (m) =>
+          m.chain_id === toolInput?.chain_id &&
+          m.address.toLowerCase() === toolInput?.token_address?.toLowerCase(),
+      );
+      if (!method) return "user-approval";
+
+      const spent = await spentInWindow({
+        tokenAddress: method.address,
+        chainId: method.chain_id,
+        decimals: method.decimals,
+        hours: policy.hours,
+      });
+      return withinBudget({ orderTotal, spent, ...policy }) ? "approved" : "user-approval";
     } catch {
       return "user-approval";
     }

@@ -39,8 +39,12 @@ signatures and kill the checkout.
 its own wallet: `checkout_begin` runs the whole checkout — sign-in, payment
 authorization, escrow — with no browser and no human, and answers `step: "done"`.
 The key never leaves the server, and no endpoint signs anything with it beyond
-the checkout itself. `BUYER_MAX_ORDER` (default 25) is the ceiling for that:
-above it the agent asks a person to approve, then still buys by itself. Before
+the checkout itself. Two ceilings bound that: `BUYER_MAX_ORDER`
+(default 25) per order, and `BUYER_MAX_WINDOW` (default 100 over 24h) for the
+total — the part a per-order cap cannot do. Above either, the agent asks a person
+to approve, then still buys by itself. The window total is read from the
+gateway's own record of what the wallet paid, so there is no ledger to keep and
+nothing the agent could rewrite. Before
 turning this on anywhere public, close the agent's channel
 (`agent/channels/eve.ts` ships anonymous) — otherwise anyone with the URL directs
 the spending.

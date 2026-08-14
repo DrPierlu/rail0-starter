@@ -25,9 +25,14 @@ import { packSignature } from "./rail0";
  * outside local development.
  *
  * Configuring the key IS the switch: set it and this deployment's agent can spend, up
- * to the per-order ceiling below. Two things belong with that decision — the agent's
- * channel (agent/channels/eve.ts) must not be anonymous, or anyone with the URL can
- * direct the spending, and the ceiling should match what you are willing to lose.
+ * to the ceilings in lib/agent-budget. Two things belong with that decision — the
+ * agent's channel (agent/channels/eve.ts) must not be anonymous, or anyone with the URL
+ * can direct the spending, and the ceilings should match what you are willing to lose.
+ *
+ * The ceilings live beside the key rather than in the agent's instructions, and that is
+ * the point: the model never holds the key, so it must not hold the limit on the key
+ * either. An instruction is read by something that also reads product descriptions
+ * written by strangers; a ceiling is not.
  */
 
 /**
@@ -86,38 +91,4 @@ export function signAsAgent(request: SignRequest): string {
           } as PaymentDetail,
         ),
       );
-}
-
-/**
- * The largest order the agent may pay for on its own, as a human decimal string.
- *
- * A ceiling exists because signing autonomously removes the guard that used to make
- * the approval on checkout_begin cheap: the comment there reasoned that the wallet
- * already gated the MONEY, since nothing moved without the shopper's two signatures,
- * so the approval only had to cover INTENT. When the agent signs, that is no longer
- * true and the approval becomes the only gate on spending. Rather than delete it or
- * ask every time, the ceiling decides which it is: under it the agent buys, over it a
- * human is asked — the escalation, not a refusal.
- *
- * Default 25.00, deliberately small: an agent that can spend is opt-in, and the amount
- * it can spend unattended should be too. BUYER_MAX_ORDER=0 removes the ceiling.
- */
-export function autonomousOrderLimit(): number {
-  return env().BUYER_MAX_ORDER;
-}
-
-/**
- * Whether `total` is within the ceiling. A ceiling of 0 means no ceiling.
- *
- * Both are human decimals; comparison is numeric, so "9.90" and "9.9" agree. A total
- * that does not parse is NOT within the limit: an amount we cannot read is exactly the
- * case to hand to a person.
- */
-export function withinAutonomousLimit(total: string, limit: number): boolean {
-  if (limit === 0) return true;
-  // Blank first, and explicitly: Number("") and Number(" ") are 0, which is finite and
-  // under every ceiling — so an empty total would read as a free order and buy itself.
-  if (total.trim() === "") return false;
-  const parsed = Number(total);
-  return Number.isFinite(parsed) && parsed <= limit;
 }

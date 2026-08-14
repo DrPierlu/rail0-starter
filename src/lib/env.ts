@@ -27,9 +27,16 @@ const schema = z.object({
     .optional(),
   // Largest order the agent pays for unattended, as a decimal in the payment
   // stablecoin. 0 removes the ceiling. Over it, the checkout asks a human to
-  // approve rather than refusing — see autonomousOrderLimit in lib/buyer-signer
-  // for why a ceiling has to exist once the agent holds the key.
+  // approve rather than refusing — see lib/agent-budget for why a ceiling has to
+  // exist once the agent holds the key.
   BUYER_MAX_ORDER: z.coerce.number().nonnegative().default(25),
+  // The ceiling that survives "New conversation". A per-session budget can live in
+  // eve's own state, but a new session resets it — and starting one is a button in
+  // the chat, so a session-scoped cap is a cap the user can clear by clicking. This
+  // one is answered from the gateway's record of what the agent actually paid, over
+  // a rolling window. 0 removes it.
+  BUYER_MAX_WINDOW: z.coerce.number().nonnegative().default(100),
+  BUYER_WINDOW_HOURS: z.coerce.number().positive().default(24),
   SIWE_CHAIN_ID: z.coerce.number().int().default(1),
   AI_MODEL: z.string().default("claude-sonnet-5"),
   // Optional HERE and required by the gate that reads it (lib/merchant-auth.ts):
@@ -52,6 +59,8 @@ export function env(): Env {
       SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
       BUYER_PRIVATE_KEY: process.env.BUYER_PRIVATE_KEY || undefined,
       BUYER_MAX_ORDER: process.env.BUYER_MAX_ORDER || undefined,
+      BUYER_MAX_WINDOW: process.env.BUYER_MAX_WINDOW || undefined,
+      BUYER_WINDOW_HOURS: process.env.BUYER_WINDOW_HOURS || undefined,
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
       MERCHANT_TOKEN: process.env.MERCHANT_TOKEN || undefined,

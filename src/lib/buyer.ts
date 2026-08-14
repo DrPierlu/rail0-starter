@@ -339,7 +339,7 @@ export async function submitSignedPayment(
  * be two ways to be in the same state.
  *
  * The caller decides WHETHER to run this — that decision is a spending decision (see
- * withinAutonomousLimit), not a mechanical one, and it belongs with the tool that has
+ * lib/agent-budget), not a mechanical one, and it belongs with the tool that has
  * the cart and the approval policy.
  */
 export async function checkoutAsAgent(

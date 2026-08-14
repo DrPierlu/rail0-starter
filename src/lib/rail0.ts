@@ -1,11 +1,15 @@
 import { checksumAddress, type Eip3009Signature, Rail0Client } from "@rail0/sdk";
 import { env } from "./env";
 
-// Seller only: this holds LONG-LIVED gateway sessions, and a buyer has none to
-// hold. A human buyer signs in their own wallet, and the configured-key buyer
-// (lib/buyer-signer) gets a session per checkout, stashed with the checkout —
-// not cached here.
-type Role = "seller";
+// Two server-side roles, and neither is a human buyer: a person signs in their own
+// wallet and their session is stashed with the checkout, not cached here.
+//
+//   seller — the merchant's backend, signing its own authorize/capture/void.
+//   agent  — this deployment's own buyer wallet, when it has one. It needs a session
+//            of its own to READ its spending history from the gateway (the budget
+//            check in lib/agent-budget); the checkout still logs in per checkout,
+//            because that flow's SIWE nonce is single-use and stashed with the order.
+type Role = "seller" | "agent";
 
 interface Session {
   client: Rail0Client;
@@ -22,8 +26,14 @@ if (!globalSessions.__rail0Sessions) {
 }
 const sessions = globalSessions.__rail0Sessions;
 
-function privateKeyFor(_role: Role): string {
-  return env().SELLER_PRIVATE_KEY;
+function privateKeyFor(role: Role): string {
+  if (role === "seller") return env().SELLER_PRIVATE_KEY;
+  const key = env().BUYER_PRIVATE_KEY;
+  // Callers reach the agent role only after checking it exists; this is the guard for
+  // the path that forgets to, and it says which switch is off rather than failing as
+  // an unreadable signature later.
+  if (!key) throw new Error("no agent wallet configured (BUYER_PRIVATE_KEY)");
+  return key;
 }
 
 export function addressFor(role: Role): string {
