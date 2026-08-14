@@ -79,6 +79,8 @@ export function getShop(base: string) {
       return shopFetch<{
         merchant: { name: string; address: string };
         categories: string[];
+        /** How many products matched, which can exceed the page returned. */
+        total: number;
         products: unknown[];
       }>(base, `/api/shop/products${qs}`);
     },

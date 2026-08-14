@@ -7,7 +7,9 @@ export default defineTool({
   description:
     "List the merchant's products, optionally filtered by category or free-text search. " +
     "The catalog is written in ENGLISH: translate the shopper's words before searching, " +
-    "whatever language they are speaking. Searching in another language finds nothing.",
+    "whatever language they are speaking. Searching in another language finds nothing. " +
+    "Only the first two dozen matches come back — `total` says how many there were, and " +
+    "a category or a search is how you see the rest.",
   inputSchema: z.object({
     category: z
       .string()

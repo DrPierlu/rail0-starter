@@ -19,6 +19,17 @@ describe("price arithmetic", () => {
 });
 
 describe("catalog", () => {
+  // The demo pays in testnet stablecoin and the agent's unattended ceiling is small, so
+  // the whole catalog stays under 3.00 — a cart of several items has to remain buyable
+  // without topping up a faucet wallet. A single dearer product is enough to break that,
+  // and nothing else would notice.
+  it("prices everything under 3.00", () => {
+    for (const product of listProducts()) {
+      expect(toCents(product.price)).toBeLessThan(300n);
+      expect(toCents(product.price)).toBeGreaterThan(0n);
+    }
+  });
+
   it("finds products by id", () => {
     const first = listProducts()[0];
     expect(getProduct(first.id)?.name).toBe(first.name);

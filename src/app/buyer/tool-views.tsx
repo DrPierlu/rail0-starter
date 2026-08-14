@@ -61,7 +61,12 @@ export function ToolView({
 
   switch (name) {
     case "list_products":
-      return <ProductGrid products={(output?.products as Product[]) ?? []} />;
+      return (
+        <ProductGrid
+          products={(output?.products as Product[]) ?? []}
+          total={typeof output?.total === "number" ? output.total : undefined}
+        />
+      );
     case "add_to_cart":
     case "view_cart":
     case "remove_from_cart":
@@ -119,9 +124,11 @@ function ToolError({ name, message }: { name: string; message: string }) {
 
 const PRODUCT_GRID_LIMIT = 8;
 
-function ProductGrid({ products }: { products: Product[] }) {
+function ProductGrid({ products, total }: { products: Product[]; total?: number }) {
   const shown = products.slice(0, PRODUCT_GRID_LIMIT);
-  const more = products.length - shown.length;
+  // Against the MATCH count, not the page: the storefront caps what it sends, so
+  // counting what arrived would under-report how much the shopper has not seen.
+  const more = (total ?? products.length) - shown.length;
   return (
     <div>
       <Caption>list_products</Caption>

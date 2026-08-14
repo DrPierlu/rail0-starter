@@ -4,704 +4,1054 @@
   },
   "products": [
     {
-      "id": "tshirts-classic",
-      "name": "Classic Tee",
-      "description": "The straight-ahead staple: regular fit, ribbed collar, soft combed-cotton jersey that holds its shape wash after wash.",
-      "price": "2.60",
-      "category": "T-Shirts"
-    },
-    {
       "id": "tshirts-slim",
       "name": "Slim-Fit Tee",
       "description": "Cut trim through the chest and waist for a sharper line. Midweight jersey with a narrow collar that sits close.",
-      "price": "1.89",
+      "price": "0.90",
       "category": "T-Shirts"
     },
     {
-      "id": "tshirts-oversized",
-      "name": "Oversized Tee",
-      "description": "Boxy and sized up for an easy drape, with dropped shoulders and a wider hem. Heavier jersey so it hangs, not clings.",
-      "price": "2.78",
-      "category": "T-Shirts"
-    },
-    {
-      "id": "tshirts-vintage",
-      "name": "Vintage Tee",
-      "description": "Garment-washed for a faded, worn-in feel from day one. Slightly slubby cotton with a softened collar.",
-      "price": "3.67",
-      "category": "T-Shirts"
-    },
-    {
-      "id": "tshirts-relaxed",
-      "name": "Relaxed Tee",
-      "description": "An easy, unfussy fit that skims rather than hugs. Breathable open-knit cotton for off-duty days.",
-      "price": "4.56",
-      "category": "T-Shirts"
-    },
-    {
-      "id": "tshirts-premium",
-      "name": "Premium Tee",
-      "description": "Long-staple Supima cotton with a denser knit and cleaner finishing — the tee for when it shows.",
-      "price": "5.45",
-      "category": "T-Shirts"
-    },
-    {
-      "id": "tshirts-organic",
-      "name": "Organic Tee",
-      "description": "GOTS-certified organic cotton, traceable to the gin. Same regular fit as the Classic, lighter footprint.",
-      "price": "6.34",
-      "category": "T-Shirts"
-    },
-    {
-      "id": "tshirts-striped",
-      "name": "Striped Tee",
-      "description": "A clean two-tone breton stripe on midweight jersey. The pattern is knitted in, not printed, so it never cracks.",
-      "price": "7.23",
-      "category": "T-Shirts"
-    },
-    {
-      "id": "tshirts-heavyweight",
-      "name": "Heavyweight Tee",
-      "description": "Dense 220-gsm jersey with a reinforced collar — structured enough to wear on its own and built to last years.",
-      "price": "8.12",
+      "id": "tshirts-classic",
+      "name": "Classic Tee",
+      "description": "The straight-ahead staple: regular fit, ribbed collar, soft combed-cotton jersey that holds its shape wash after wash.",
+      "price": "1.02",
       "category": "T-Shirts"
     },
     {
       "id": "tshirts-everyday",
       "name": "Everyday Tee",
       "description": "Light, simple and priced to buy in threes. The no-thought tee for under everything.",
-      "price": "9.01",
+      "price": "1.13",
       "category": "T-Shirts"
     },
     {
-      "id": "hoodies-classic",
-      "name": "Classic Hoodie",
-      "description": "The standard-issue hoodie: brushed-back fleece, kangaroo pocket, double-layer hood with flat drawcords.",
-      "price": "9.90",
-      "category": "Hoodies"
+      "id": "tshirts-relaxed",
+      "name": "Relaxed Tee",
+      "description": "An easy, unfussy fit that skims rather than hugs. Breathable open-knit cotton for off-duty days.",
+      "price": "1.25",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-oversized",
+      "name": "Oversized Tee",
+      "description": "Boxy and sized up for an easy drape, with dropped shoulders and a wider hem. Heavier jersey so it hangs, not clings.",
+      "price": "1.37",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-striped",
+      "name": "Striped Tee",
+      "description": "A clean two-tone breton stripe on midweight jersey. The pattern is knitted in, not printed, so it never cracks.",
+      "price": "1.48",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-vintage",
+      "name": "Vintage Tee",
+      "description": "Garment-washed for a faded, worn-in feel from day one. Slightly slubby cotton with a softened collar.",
+      "price": "1.60",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-organic",
+      "name": "Organic Tee",
+      "description": "GOTS-certified organic cotton, traceable to the gin. Same regular fit as the Classic, lighter footprint.",
+      "price": "1.72",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-heavyweight",
+      "name": "Heavyweight Tee",
+      "description": "Dense 220-gsm jersey with a reinforced collar — structured enough to wear on its own and built to last years.",
+      "price": "1.83",
+      "category": "T-Shirts"
+    },
+    {
+      "id": "tshirts-premium",
+      "name": "Premium Tee",
+      "description": "Long-staple Supima cotton with a denser knit and cleaner finishing — the tee for when it shows.",
+      "price": "1.95",
+      "category": "T-Shirts"
     },
     {
       "id": "hoodies-slim",
       "name": "Slim-Fit Hoodie",
       "description": "A trimmer cut through the body and arms so it layers under a jacket without bunching. Midweight loopback fleece.",
-      "price": "1.78",
+      "price": "1.45",
       "category": "Hoodies"
     },
     {
-      "id": "hoodies-oversized",
-      "name": "Oversized Hoodie",
-      "description": "Dropped shoulders and a roomy body for the blanket-like fit. Heavy fleece with a generous crossover hood.",
-      "price": "2.67",
-      "category": "Hoodies"
-    },
-    {
-      "id": "hoodies-vintage",
-      "name": "Vintage Hoodie",
-      "description": "Pigment-dyed and tumbled for a sun-faded look, with contrast stitching that pops as it ages.",
-      "price": "3.56",
-      "category": "Hoodies"
-    },
-    {
-      "id": "hoodies-relaxed",
-      "name": "Relaxed Hoodie",
-      "description": "Softer, lighter fleece in an easy fit — the between-seasons hoodie for the couch and the corner shop.",
-      "price": "4.45",
-      "category": "Hoodies"
-    },
-    {
-      "id": "hoodies-premium",
-      "name": "Premium Hoodie",
-      "description": "Heavy 480-gsm loopback in a structured fit, with metal-tipped drawcords and a lined hood. Feels tailored, wears casual.",
-      "price": "5.34",
-      "category": "Hoodies"
-    },
-    {
-      "id": "hoodies-organic",
-      "name": "Organic Hoodie",
-      "description": "Organic-cotton fleece, undyed trims and corozo-buttoned cuffs. Certified from fibre to finish.",
-      "price": "6.23",
-      "category": "Hoodies"
-    },
-    {
-      "id": "hoodies-striped",
-      "name": "Striped Hoodie",
-      "description": "A bold chest stripe knitted into heathered fleece. One accent, everything else kept quiet.",
-      "price": "7.12",
-      "category": "Hoodies"
-    },
-    {
-      "id": "hoodies-heavyweight",
-      "name": "Heavyweight Hoodie",
-      "description": "Almost jacket-weight fleece with ribbed side panels — the outdoor hoodie for cold mornings.",
-      "price": "8.01",
+      "id": "hoodies-classic",
+      "name": "Classic Hoodie",
+      "description": "The standard-issue hoodie: brushed-back fleece, kangaroo pocket, double-layer hood with flat drawcords.",
+      "price": "1.57",
       "category": "Hoodies"
     },
     {
       "id": "hoodies-everyday",
       "name": "Everyday Hoodie",
       "description": "A light, honest hoodie at a light, honest price. Zip-free, fuss-free, everywhere-appropriate.",
-      "price": "8.90",
+      "price": "1.69",
       "category": "Hoodies"
     },
     {
-      "id": "sweaters-classic",
-      "name": "Classic Sweater",
-      "description": "A midweight crew-neck knit that layers cleanly over a tee or under a jacket. Ribbed cuffs and hem.",
-      "price": "9.79",
-      "category": "Sweaters"
+      "id": "hoodies-relaxed",
+      "name": "Relaxed Hoodie",
+      "description": "Softer, lighter fleece in an easy fit — the between-seasons hoodie for the couch and the corner shop.",
+      "price": "1.82",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-oversized",
+      "name": "Oversized Hoodie",
+      "description": "Dropped shoulders and a roomy body for the blanket-like fit. Heavy fleece with a generous crossover hood.",
+      "price": "1.94",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-striped",
+      "name": "Striped Hoodie",
+      "description": "A bold chest stripe knitted into heathered fleece. One accent, everything else kept quiet.",
+      "price": "2.06",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-vintage",
+      "name": "Vintage Hoodie",
+      "description": "Pigment-dyed and tumbled for a sun-faded look, with contrast stitching that pops as it ages.",
+      "price": "2.18",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-organic",
+      "name": "Organic Hoodie",
+      "description": "Organic-cotton fleece, undyed trims and corozo-buttoned cuffs. Certified from fibre to finish.",
+      "price": "2.31",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-heavyweight",
+      "name": "Heavyweight Hoodie",
+      "description": "Almost jacket-weight fleece with ribbed side panels — the outdoor hoodie for cold mornings.",
+      "price": "2.43",
+      "category": "Hoodies"
+    },
+    {
+      "id": "hoodies-premium",
+      "name": "Premium Hoodie",
+      "description": "Heavy 480-gsm loopback in a structured fit, with metal-tipped drawcords and a lined hood. Feels tailored, wears casual.",
+      "price": "2.55",
+      "category": "Hoodies"
     },
     {
       "id": "sweaters-slim",
       "name": "Slim-Fit Sweater",
       "description": "Fine-gauge merino cut close to the body — sharp enough for the office, soft enough for the train.",
-      "price": "1.67",
+      "price": "1.35",
       "category": "Sweaters"
     },
     {
-      "id": "sweaters-oversized",
-      "name": "Oversized Sweater",
-      "description": "A slouchy, chunky knit with dropped shoulders and extra length. Made for cold rooms and big mugs.",
-      "price": "2.56",
-      "category": "Sweaters"
-    },
-    {
-      "id": "sweaters-vintage",
-      "name": "Vintage Sweater",
-      "description": "Space-dyed yarn and a gently faded palette give it the look of a hand-me-down favourite.",
-      "price": "3.45",
-      "category": "Sweaters"
-    },
-    {
-      "id": "sweaters-relaxed",
-      "name": "Relaxed Sweater",
-      "description": "An airy, loose-gauge knit that breathes — the sweater for shoulder seasons.",
-      "price": "4.34",
-      "category": "Sweaters"
-    },
-    {
-      "id": "sweaters-premium",
-      "name": "Premium Sweater",
-      "description": "Two-ply lambswool, fully fashioned seams, no pilling shortcuts. The one sweater to buy well.",
-      "price": "5.23",
-      "category": "Sweaters"
-    },
-    {
-      "id": "sweaters-organic",
-      "name": "Organic Sweater",
-      "description": "Undyed organic wool in its natural marl. Sheared, spun and knitted within one certified chain.",
-      "price": "6.12",
-      "category": "Sweaters"
-    },
-    {
-      "id": "sweaters-striped",
-      "name": "Striped Sweater",
-      "description": "A wide two-colour stripe on a midweight crew. Wears like a plain knit, reads like a statement.",
-      "price": "7.01",
-      "category": "Sweaters"
-    },
-    {
-      "id": "sweaters-heavyweight",
-      "name": "Heavyweight Sweater",
-      "description": "A dense fisherman-rib knit that stands in for a jacket most of the winter.",
-      "price": "7.90",
+      "id": "sweaters-classic",
+      "name": "Classic Sweater",
+      "description": "A midweight crew-neck knit that layers cleanly over a tee or under a jacket. Ribbed cuffs and hem.",
+      "price": "1.47",
       "category": "Sweaters"
     },
     {
       "id": "sweaters-everyday",
       "name": "Everyday Sweater",
       "description": "A soft cotton-blend crew that goes with everything and asks for nothing. Machine-washable.",
-      "price": "8.79",
+      "price": "1.59",
       "category": "Sweaters"
     },
     {
-      "id": "shirts-classic",
-      "name": "Classic Shirt",
-      "description": "Crisp cotton poplin with a button-down collar — smart without trying. Single-needle stitching throughout.",
-      "price": "9.68",
-      "category": "Shirts"
+      "id": "sweaters-relaxed",
+      "name": "Relaxed Sweater",
+      "description": "An airy, loose-gauge knit that breathes — the sweater for shoulder seasons.",
+      "price": "1.72",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-oversized",
+      "name": "Oversized Sweater",
+      "description": "A slouchy, chunky knit with dropped shoulders and extra length. Made for cold rooms and big mugs.",
+      "price": "1.84",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-striped",
+      "name": "Striped Sweater",
+      "description": "A wide two-colour stripe on a midweight crew. Wears like a plain knit, reads like a statement.",
+      "price": "1.96",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-vintage",
+      "name": "Vintage Sweater",
+      "description": "Space-dyed yarn and a gently faded palette give it the look of a hand-me-down favourite.",
+      "price": "2.08",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-organic",
+      "name": "Organic Sweater",
+      "description": "Undyed organic wool in its natural marl. Sheared, spun and knitted within one certified chain.",
+      "price": "2.21",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-heavyweight",
+      "name": "Heavyweight Sweater",
+      "description": "A dense fisherman-rib knit that stands in for a jacket most of the winter.",
+      "price": "2.33",
+      "category": "Sweaters"
+    },
+    {
+      "id": "sweaters-premium",
+      "name": "Premium Sweater",
+      "description": "Two-ply lambswool, fully fashioned seams, no pilling shortcuts. The one sweater to buy well.",
+      "price": "2.45",
+      "category": "Sweaters"
     },
     {
       "id": "shirts-slim",
       "name": "Slim-Fit Shirt",
       "description": "A tailored cut with darted back seams for a clean taper. Poplin with a touch of stretch.",
-      "price": "1.56",
+      "price": "1.20",
       "category": "Shirts"
     },
     {
-      "id": "shirts-oversized",
-      "name": "Oversized Shirt",
-      "description": "Camp-collar and boxy through the body, made to wear open over a tee or buttoned to the top.",
-      "price": "2.45",
-      "category": "Shirts"
-    },
-    {
-      "id": "shirts-vintage",
-      "name": "Vintage Shirt",
-      "description": "Washed chambray with mother-of-pearl buttons and a softened collar that skips the ironing board.",
-      "price": "3.34",
-      "category": "Shirts"
-    },
-    {
-      "id": "shirts-relaxed",
-      "name": "Relaxed Shirt",
-      "description": "Garment-dyed twill in an easy fit — a shirt that works untucked by design.",
-      "price": "4.23",
-      "category": "Shirts"
-    },
-    {
-      "id": "shirts-premium",
-      "name": "Premium Shirt",
-      "description": "Two-fold 120s cotton, split yoke, hand-finished buttonholes. The shirt for the days that matter.",
-      "price": "5.12",
-      "category": "Shirts"
-    },
-    {
-      "id": "shirts-organic",
-      "name": "Organic Shirt",
-      "description": "Certified organic poplin, corozo buttons, low-impact dyes. Every layer of it accounted for.",
-      "price": "6.01",
-      "category": "Shirts"
-    },
-    {
-      "id": "shirts-striped",
-      "name": "Striped Shirt",
-      "description": "A fine bengal stripe on white poplin — the pattern that reads as a solid from across the room.",
-      "price": "6.90",
-      "category": "Shirts"
-    },
-    {
-      "id": "shirts-heavyweight",
-      "name": "Heavyweight Shirt",
-      "description": "Thick brushed flannel with a triple-stitched yoke. More shirt-jacket than shirt when it's cold.",
-      "price": "7.79",
+      "id": "shirts-classic",
+      "name": "Classic Shirt",
+      "description": "Crisp cotton poplin with a button-down collar — smart without trying. Single-needle stitching throughout.",
+      "price": "1.32",
       "category": "Shirts"
     },
     {
       "id": "shirts-everyday",
       "name": "Everyday Shirt",
       "description": "A wrinkle-shrugging cotton-blend shirt for the daily rotation. Wash, hang, wear.",
-      "price": "8.68",
+      "price": "1.43",
       "category": "Shirts"
     },
     {
-      "id": "jeans-classic",
-      "name": "Classic Jeans",
-      "description": "The regular-fit five-pocket in rigid 12-oz indigo denim that breaks in the more you wear it.",
-      "price": "9.57",
-      "category": "Jeans"
+      "id": "shirts-relaxed",
+      "name": "Relaxed Shirt",
+      "description": "Garment-dyed twill in an easy fit — a shirt that works untucked by design.",
+      "price": "1.55",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-oversized",
+      "name": "Oversized Shirt",
+      "description": "Camp-collar and boxy through the body, made to wear open over a tee or buttoned to the top.",
+      "price": "1.67",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-striped",
+      "name": "Striped Shirt",
+      "description": "A fine bengal stripe on white poplin — the pattern that reads as a solid from across the room.",
+      "price": "1.78",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-vintage",
+      "name": "Vintage Shirt",
+      "description": "Washed chambray with mother-of-pearl buttons and a softened collar that skips the ironing board.",
+      "price": "1.90",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-organic",
+      "name": "Organic Shirt",
+      "description": "Certified organic poplin, corozo buttons, low-impact dyes. Every layer of it accounted for.",
+      "price": "2.02",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-heavyweight",
+      "name": "Heavyweight Shirt",
+      "description": "Thick brushed flannel with a triple-stitched yoke. More shirt-jacket than shirt when it's cold.",
+      "price": "2.13",
+      "category": "Shirts"
+    },
+    {
+      "id": "shirts-premium",
+      "name": "Premium Shirt",
+      "description": "Two-fold 120s cotton, split yoke, hand-finished buttonholes. The shirt for the days that matter.",
+      "price": "2.25",
+      "category": "Shirts"
     },
     {
       "id": "jeans-slim",
       "name": "Slim-Fit Jeans",
       "description": "A slim leg with just enough stretch to keep its shape by evening. Mid-rise, tapered from the knee.",
-      "price": "1.45",
+      "price": "1.60",
       "category": "Jeans"
     },
     {
-      "id": "jeans-oversized",
-      "name": "Oversized Jeans",
-      "description": "A wide, straight leg with a high rise — the loose fit, cut to stack over sneakers.",
-      "price": "2.34",
-      "category": "Jeans"
-    },
-    {
-      "id": "jeans-vintage",
-      "name": "Vintage Jeans",
-      "description": "Stone-washed with honest whiskering and a faded seat, finished with chain-stitched hems.",
-      "price": "3.23",
-      "category": "Jeans"
-    },
-    {
-      "id": "jeans-relaxed",
-      "name": "Relaxed Jeans",
-      "description": "An easy seat and thigh with a gentle taper. The jeans for long-haul days.",
-      "price": "4.12",
-      "category": "Jeans"
-    },
-    {
-      "id": "jeans-premium",
-      "name": "Premium Jeans",
-      "description": "Japanese selvedge, 14-oz, cut straight and hemmed to order. Fades you earn, not buy.",
-      "price": "5.01",
-      "category": "Jeans"
-    },
-    {
-      "id": "jeans-organic",
-      "name": "Organic Jeans",
-      "description": "Organic cotton denim dyed in a closed-loop indigo bath — 90% less water than standard.",
-      "price": "5.90",
-      "category": "Jeans"
-    },
-    {
-      "id": "jeans-striped",
-      "name": "Striped Jeans",
-      "description": "A subtle railroad-stripe denim straight out of the workwear archive. Cut like the Classic.",
-      "price": "6.79",
-      "category": "Jeans"
-    },
-    {
-      "id": "jeans-heavyweight",
-      "name": "Heavyweight Jeans",
-      "description": "16-oz denim with riveted stress points and a double-layer knee. Workwear that means it.",
-      "price": "7.68",
+      "id": "jeans-classic",
+      "name": "Classic Jeans",
+      "description": "The regular-fit five-pocket in rigid 12-oz indigo denim that breaks in the more you wear it.",
+      "price": "1.72",
       "category": "Jeans"
     },
     {
       "id": "jeans-everyday",
       "name": "Everyday Jeans",
       "description": "A soft, broken-in stretch denim at a see-you-tomorrow price. The default pair.",
-      "price": "8.57",
+      "price": "1.84",
       "category": "Jeans"
     },
     {
-      "id": "shorts-classic",
-      "name": "Classic Shorts",
-      "description": "Lightweight cotton twill with deep pockets and a 7-inch inseam. The default warm-weather short.",
-      "price": "9.46",
-      "category": "Shorts"
+      "id": "jeans-relaxed",
+      "name": "Relaxed Jeans",
+      "description": "An easy seat and thigh with a gentle taper. The jeans for long-haul days.",
+      "price": "1.97",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-oversized",
+      "name": "Oversized Jeans",
+      "description": "A wide, straight leg with a high rise — the loose fit, cut to stack over sneakers.",
+      "price": "2.09",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-striped",
+      "name": "Striped Jeans",
+      "description": "A subtle railroad-stripe denim straight out of the workwear archive. Cut like the Classic.",
+      "price": "2.21",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-vintage",
+      "name": "Vintage Jeans",
+      "description": "Stone-washed with honest whiskering and a faded seat, finished with chain-stitched hems.",
+      "price": "2.33",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-organic",
+      "name": "Organic Jeans",
+      "description": "Organic cotton denim dyed in a closed-loop indigo bath — 90% less water than standard.",
+      "price": "2.46",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-heavyweight",
+      "name": "Heavyweight Jeans",
+      "description": "16-oz denim with riveted stress points and a double-layer knee. Workwear that means it.",
+      "price": "2.58",
+      "category": "Jeans"
+    },
+    {
+      "id": "jeans-premium",
+      "name": "Premium Jeans",
+      "description": "Japanese selvedge, 14-oz, cut straight and hemmed to order. Fades you earn, not buy.",
+      "price": "2.70",
+      "category": "Jeans"
     },
     {
       "id": "shorts-slim",
       "name": "Slim-Fit Shorts",
       "description": "A trimmer leg and shorter 5-inch inseam for a cleaner summer line. Stretch twill.",
-      "price": "1.34",
+      "price": "1.05",
       "category": "Shorts"
     },
     {
-      "id": "shorts-oversized",
-      "name": "Oversized Shorts",
-      "description": "Long, wide and skate-adjacent, with a dropped crotch and heavy drill fabric.",
-      "price": "2.23",
-      "category": "Shorts"
-    },
-    {
-      "id": "shorts-vintage",
-      "name": "Vintage Shorts",
-      "description": "Washed-out canvas with a frayed hem option and a faded palette straight from an old summer.",
-      "price": "3.12",
-      "category": "Shorts"
-    },
-    {
-      "id": "shorts-relaxed",
-      "name": "Relaxed Shorts",
-      "description": "An elastic drawstring waist and airy poplin — the shorts that never feel like trousers.",
-      "price": "4.01",
-      "category": "Shorts"
-    },
-    {
-      "id": "shorts-premium",
-      "name": "Premium Shorts",
-      "description": "Tailored dress shorts in a crisp cotton-linen weave, with a proper waistband and side adjusters.",
-      "price": "4.90",
-      "category": "Shorts"
-    },
-    {
-      "id": "shorts-organic",
-      "name": "Organic Shorts",
-      "description": "Organic cotton twill with recycled-polyester pocketing and natural-shell buttons.",
-      "price": "5.79",
-      "category": "Shorts"
-    },
-    {
-      "id": "shorts-striped",
-      "name": "Striped Shorts",
-      "description": "A vertical awning stripe that says holiday even on a Tuesday. Relaxed fit.",
-      "price": "6.68",
-      "category": "Shorts"
-    },
-    {
-      "id": "shorts-heavyweight",
-      "name": "Heavyweight Shorts",
-      "description": "Duck-canvas work shorts with a hammer loop and bar-tacked pockets. For actual work, or the look of it.",
-      "price": "7.57",
+      "id": "shorts-classic",
+      "name": "Classic Shorts",
+      "description": "Lightweight cotton twill with deep pockets and a 7-inch inseam. The default warm-weather short.",
+      "price": "1.16",
       "category": "Shorts"
     },
     {
       "id": "shorts-everyday",
       "name": "Everyday Shorts",
       "description": "Soft jersey shorts with pockets that hold a phone. Weekend default, priced accordingly.",
-      "price": "8.46",
+      "price": "1.27",
       "category": "Shorts"
     },
     {
-      "id": "jackets-classic",
-      "name": "Classic Jacket",
-      "description": "A clean, unlined cotton harrington with a water-repellent finish and zipped pockets.",
-      "price": "9.35",
-      "category": "Jackets"
+      "id": "shorts-relaxed",
+      "name": "Relaxed Shorts",
+      "description": "An elastic drawstring waist and airy poplin — the shorts that never feel like trousers.",
+      "price": "1.38",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-oversized",
+      "name": "Oversized Shorts",
+      "description": "Long, wide and skate-adjacent, with a dropped crotch and heavy drill fabric.",
+      "price": "1.49",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-striped",
+      "name": "Striped Shorts",
+      "description": "A vertical awning stripe that says holiday even on a Tuesday. Relaxed fit.",
+      "price": "1.61",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-vintage",
+      "name": "Vintage Shorts",
+      "description": "Washed-out canvas with a frayed hem option and a faded palette straight from an old summer.",
+      "price": "1.72",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-organic",
+      "name": "Organic Shorts",
+      "description": "Organic cotton twill with recycled-polyester pocketing and natural-shell buttons.",
+      "price": "1.83",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-heavyweight",
+      "name": "Heavyweight Shorts",
+      "description": "Duck-canvas work shorts with a hammer loop and bar-tacked pockets. For actual work, or the look of it.",
+      "price": "1.94",
+      "category": "Shorts"
+    },
+    {
+      "id": "shorts-premium",
+      "name": "Premium Shorts",
+      "description": "Tailored dress shorts in a crisp cotton-linen weave, with a proper waistband and side adjusters.",
+      "price": "2.05",
+      "category": "Shorts"
     },
     {
       "id": "jackets-slim",
       "name": "Slim-Fit Jacket",
       "description": "A cropped, tailored bomber that sits at the waist and layers over knits without bulk.",
-      "price": "1.23",
+      "price": "1.75",
       "category": "Jackets"
     },
     {
-      "id": "jackets-oversized",
-      "name": "Oversized Jacket",
-      "description": "A big-shouldered chore coat with room for a hoodie underneath and four patch pockets.",
-      "price": "2.12",
-      "category": "Jackets"
-    },
-    {
-      "id": "jackets-vintage",
-      "name": "Vintage Jacket",
-      "description": "Washed and sun-faded canvas with antiqued hardware — looks inherited, wears new.",
-      "price": "3.01",
-      "category": "Jackets"
-    },
-    {
-      "id": "jackets-relaxed",
-      "name": "Relaxed Jacket",
-      "description": "A soft, packable shell for weather that can't make up its mind. Stuffs into its own pocket.",
-      "price": "3.90",
-      "category": "Jackets"
-    },
-    {
-      "id": "jackets-premium",
-      "name": "Premium Jacket",
-      "description": "Waxed British cotton with corduroy trims, storm cuffs and a tartan lining. Repairable for life.",
-      "price": "4.79",
-      "category": "Jackets"
-    },
-    {
-      "id": "jackets-organic",
-      "name": "Organic Jacket",
-      "description": "An organic-cotton shell with recycled insulation and a PFC-free waterproof finish.",
-      "price": "5.68",
-      "category": "Jackets"
-    },
-    {
-      "id": "jackets-striped",
-      "name": "Striped Jacket",
-      "description": "A retro coach jacket with contrast sleeve stripes and a snap front.",
-      "price": "6.57",
-      "category": "Jackets"
-    },
-    {
-      "id": "jackets-heavyweight",
-      "name": "Heavyweight Jacket",
-      "description": "A duck-canvas work jacket with a blanket lining and triple-stitched seams. Built for the site, worn in the city.",
-      "price": "7.46",
+      "id": "jackets-classic",
+      "name": "Classic Jacket",
+      "description": "A clean, unlined cotton harrington with a water-repellent finish and zipped pockets.",
+      "price": "1.88",
       "category": "Jackets"
     },
     {
       "id": "jackets-everyday",
       "name": "Everyday Jacket",
       "description": "A light windbreaker that lives at the bottom of the bag until it earns its keep.",
-      "price": "8.35",
+      "price": "2.02",
       "category": "Jackets"
     },
     {
-      "id": "hats-classic",
-      "name": "Classic Beanie",
-      "description": "A fine rib-knit beanie in soft lambswool that stays put without pinching. One size, folds flat.",
-      "price": "9.24",
-      "category": "Hats"
+      "id": "jackets-relaxed",
+      "name": "Relaxed Jacket",
+      "description": "A soft, packable shell for weather that can't make up its mind. Stuffs into its own pocket.",
+      "price": "2.15",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-oversized",
+      "name": "Oversized Jacket",
+      "description": "A big-shouldered chore coat with room for a hoodie underneath and four patch pockets.",
+      "price": "2.28",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-striped",
+      "name": "Striped Jacket",
+      "description": "A retro coach jacket with contrast sleeve stripes and a snap front.",
+      "price": "2.42",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-vintage",
+      "name": "Vintage Jacket",
+      "description": "Washed and sun-faded canvas with antiqued hardware — looks inherited, wears new.",
+      "price": "2.55",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-organic",
+      "name": "Organic Jacket",
+      "description": "An organic-cotton shell with recycled insulation and a PFC-free waterproof finish.",
+      "price": "2.68",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-heavyweight",
+      "name": "Heavyweight Jacket",
+      "description": "A duck-canvas work jacket with a blanket lining and triple-stitched seams. Built for the site, worn in the city.",
+      "price": "2.82",
+      "category": "Jackets"
+    },
+    {
+      "id": "jackets-premium",
+      "name": "Premium Jacket",
+      "description": "Waxed British cotton with corduroy trims, storm cuffs and a tartan lining. Repairable for life.",
+      "price": "2.95",
+      "category": "Jackets"
     },
     {
       "id": "hats-slim",
       "name": "Slim-Fit Beanie",
       "description": "A low-profile, close-fitting beanie with no fold — the skater cut that sits above the ears.",
-      "price": "1.12",
+      "price": "0.60",
       "category": "Hats"
     },
     {
-      "id": "hats-oversized",
-      "name": "Oversized Beanie",
-      "description": "A slouchy, extra-long beanie with room to spare at the crown. Chunky hand-feel knit.",
-      "price": "2.01",
-      "category": "Hats"
-    },
-    {
-      "id": "hats-vintage",
-      "name": "Vintage Beanie",
-      "description": "A faded, garment-washed beanie with a frayed roll — looks like the one you lost years ago.",
-      "price": "2.90",
-      "category": "Hats"
-    },
-    {
-      "id": "hats-relaxed",
-      "name": "Relaxed Beanie",
-      "description": "A loose-gauge cotton beanie that breathes, for the months when wool is too much.",
-      "price": "3.79",
-      "category": "Hats"
-    },
-    {
-      "id": "hats-premium",
-      "name": "Premium Beanie",
-      "description": "Pure cashmere, seamless-knitted and cloud-soft. The beanie as a small luxury.",
-      "price": "4.68",
-      "category": "Hats"
-    },
-    {
-      "id": "hats-organic",
-      "name": "Organic Beanie",
-      "description": "Undyed organic merino in its natural shade, knitted in a certified mill.",
-      "price": "5.57",
-      "category": "Hats"
-    },
-    {
-      "id": "hats-striped",
-      "name": "Striped Beanie",
-      "description": "A two-colour ringed beanie with a contrast pom option. Ski-lift energy, city-approved.",
-      "price": "6.46",
-      "category": "Hats"
-    },
-    {
-      "id": "hats-heavyweight",
-      "name": "Heavyweight Beanie",
-      "description": "A thick double-layer watch cap that laughs at wind. The coldest-day beanie.",
-      "price": "7.35",
+      "id": "hats-classic",
+      "name": "Classic Beanie",
+      "description": "A fine rib-knit beanie in soft lambswool that stays put without pinching. One size, folds flat.",
+      "price": "0.70",
       "category": "Hats"
     },
     {
       "id": "hats-everyday",
       "name": "Everyday Beanie",
       "description": "A simple acrylic-blend beanie in every colour, priced to keep one in each coat pocket.",
-      "price": "8.24",
+      "price": "0.80",
       "category": "Hats"
     },
     {
-      "id": "socks-classic",
-      "name": "Classic Socks",
-      "description": "A cushioned cotton-blend crew with arch support and a seamless toe. Three-pair pack.",
-      "price": "9.13",
-      "category": "Socks"
+      "id": "hats-relaxed",
+      "name": "Relaxed Beanie",
+      "description": "A loose-gauge cotton beanie that breathes, for the months when wool is too much.",
+      "price": "0.90",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-oversized",
+      "name": "Oversized Beanie",
+      "description": "A slouchy, extra-long beanie with room to spare at the crown. Chunky hand-feel knit.",
+      "price": "1.00",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-striped",
+      "name": "Striped Beanie",
+      "description": "A two-colour ringed beanie with a contrast pom option. Ski-lift energy, city-approved.",
+      "price": "1.10",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-vintage",
+      "name": "Vintage Beanie",
+      "description": "A faded, garment-washed beanie with a frayed roll — looks like the one you lost years ago.",
+      "price": "1.20",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-organic",
+      "name": "Organic Beanie",
+      "description": "Undyed organic merino in its natural shade, knitted in a certified mill.",
+      "price": "1.30",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-heavyweight",
+      "name": "Heavyweight Beanie",
+      "description": "A thick double-layer watch cap that laughs at wind. The coldest-day beanie.",
+      "price": "1.40",
+      "category": "Hats"
+    },
+    {
+      "id": "hats-premium",
+      "name": "Premium Beanie",
+      "description": "Pure cashmere, seamless-knitted and cloud-soft. The beanie as a small luxury.",
+      "price": "1.50",
+      "category": "Hats"
     },
     {
       "id": "socks-slim",
       "name": "Slim-Fit Socks",
       "description": "A thin, breathable dress sock that disappears into a loafer and holds at the calf.",
-      "price": "1.01",
+      "price": "0.45",
       "category": "Socks"
     },
     {
-      "id": "socks-oversized",
-      "name": "Oversized Socks",
-      "description": "Thick slouch socks made to bunch at the ankle. Comfort over neatness, on purpose.",
-      "price": "1.90",
-      "category": "Socks"
-    },
-    {
-      "id": "socks-vintage",
-      "name": "Vintage Socks",
-      "description": "Off-white tube socks with the double retro stripe. Gym-class nostalgia, modern fibres.",
-      "price": "2.79",
-      "category": "Socks"
-    },
-    {
-      "id": "socks-relaxed",
-      "name": "Relaxed Socks",
-      "description": "A loose-top lounge sock with no elastic bite — for flights, sofas and floors.",
-      "price": "3.68",
-      "category": "Socks"
-    },
-    {
-      "id": "socks-premium",
-      "name": "Premium Socks",
-      "description": "Merino-silk blend with hand-linked toes: warm in winter, cool in summer, luxurious always.",
-      "price": "4.57",
-      "category": "Socks"
-    },
-    {
-      "id": "socks-organic",
-      "name": "Organic Socks",
-      "description": "Organic combed cotton with recycled elastane; undyed heel and toe. Compost the packaging.",
-      "price": "5.46",
-      "category": "Socks"
-    },
-    {
-      "id": "socks-striped",
-      "name": "Striped Socks",
-      "description": "Bold multi-stripe crews that do the talking when the trousers are plain.",
-      "price": "6.35",
-      "category": "Socks"
-    },
-    {
-      "id": "socks-heavyweight",
-      "name": "Heavyweight Socks",
-      "description": "Terry-lined boot socks with reinforced heels — hiking-grade cushioning for winter days.",
-      "price": "7.24",
+      "id": "socks-classic",
+      "name": "Classic Socks",
+      "description": "A cushioned cotton-blend crew with arch support and a seamless toe. Three-pair pack.",
+      "price": "0.55",
       "category": "Socks"
     },
     {
       "id": "socks-everyday",
       "name": "Everyday Socks",
       "description": "The honest white crew sock, sold in a five-pack. Restock and forget.",
-      "price": "8.13",
+      "price": "0.65",
       "category": "Socks"
     },
     {
-      "id": "accessories-classic",
-      "name": "Classic Belt",
-      "description": "A full-grain leather belt with a brushed-steel buckle, cut to be trimmed to size. Ages beautifully.",
-      "price": "9.02",
-      "category": "Accessories"
+      "id": "socks-relaxed",
+      "name": "Relaxed Socks",
+      "description": "A loose-top lounge sock with no elastic bite — for flights, sofas and floors.",
+      "price": "0.75",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-oversized",
+      "name": "Oversized Socks",
+      "description": "Thick slouch socks made to bunch at the ankle. Comfort over neatness, on purpose.",
+      "price": "0.85",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-striped",
+      "name": "Striped Socks",
+      "description": "Bold multi-stripe crews that do the talking when the trousers are plain.",
+      "price": "0.95",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-vintage",
+      "name": "Vintage Socks",
+      "description": "Off-white tube socks with the double retro stripe. Gym-class nostalgia, modern fibres.",
+      "price": "1.05",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-organic",
+      "name": "Organic Socks",
+      "description": "Organic combed cotton with recycled elastane; undyed heel and toe. Compost the packaging.",
+      "price": "1.15",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-heavyweight",
+      "name": "Heavyweight Socks",
+      "description": "Terry-lined boot socks with reinforced heels — hiking-grade cushioning for winter days.",
+      "price": "1.25",
+      "category": "Socks"
+    },
+    {
+      "id": "socks-premium",
+      "name": "Premium Socks",
+      "description": "Merino-silk blend with hand-linked toes: warm in winter, cool in summer, luxurious always.",
+      "price": "1.35",
+      "category": "Socks"
     },
     {
       "id": "accessories-slim",
       "name": "Slim-Fit Belt",
       "description": "A narrow 2.5-cm dress belt in polished calf leather — the finishing line for tailoring.",
-      "price": "9.91",
+      "price": "0.70",
       "category": "Accessories"
     },
     {
-      "id": "accessories-oversized",
-      "name": "Oversized Belt",
-      "description": "A wide 4.5-cm statement belt with an oversized buckle, made to anchor high-waisted denim.",
-      "price": "1.79",
-      "category": "Accessories"
-    },
-    {
-      "id": "accessories-vintage",
-      "name": "Vintage Belt",
-      "description": "Distressed leather with a burnished, antiqued buckle — pre-loved looks without the hunt.",
-      "price": "2.68",
-      "category": "Accessories"
-    },
-    {
-      "id": "accessories-relaxed",
-      "name": "Relaxed Belt",
-      "description": "A soft braided-leather belt with no holes: it fastens anywhere, so it always fits.",
-      "price": "3.57",
-      "category": "Accessories"
-    },
-    {
-      "id": "accessories-premium",
-      "name": "Premium Belt",
-      "description": "Italian bridle leather, solid-brass hardware and edge-painted finishing. A decade of daily wear in it.",
-      "price": "4.46",
-      "category": "Accessories"
-    },
-    {
-      "id": "accessories-organic",
-      "name": "Organic Belt",
-      "description": "Vegetable-tanned leather from certified hides, dyed with plant pigments.",
-      "price": "5.35",
-      "category": "Accessories"
-    },
-    {
-      "id": "accessories-striped",
-      "name": "Striped Belt",
-      "description": "A woven canvas belt with a two-tone stripe and leather tabs — the summer belt.",
-      "price": "6.24",
-      "category": "Accessories"
-    },
-    {
-      "id": "accessories-heavyweight",
-      "name": "Heavyweight Belt",
-      "description": "A thick 4-mm work belt with a double-prong roller buckle. Holds tools, outlasts trousers.",
-      "price": "7.13",
+      "id": "accessories-classic",
+      "name": "Classic Belt",
+      "description": "A full-grain leather belt with a brushed-steel buckle, cut to be trimmed to size. Ages beautifully.",
+      "price": "0.82",
       "category": "Accessories"
     },
     {
       "id": "accessories-everyday",
       "name": "Everyday Belt",
       "description": "A clean, minimal belt in durable coated canvas at a grab-two price.",
-      "price": "8.02",
+      "price": "0.94",
       "category": "Accessories"
+    },
+    {
+      "id": "accessories-relaxed",
+      "name": "Relaxed Belt",
+      "description": "A soft braided-leather belt with no holes: it fastens anywhere, so it always fits.",
+      "price": "1.07",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-oversized",
+      "name": "Oversized Belt",
+      "description": "A wide 4.5-cm statement belt with an oversized buckle, made to anchor high-waisted denim.",
+      "price": "1.19",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-striped",
+      "name": "Striped Belt",
+      "description": "A woven canvas belt with a two-tone stripe and leather tabs — the summer belt.",
+      "price": "1.31",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-vintage",
+      "name": "Vintage Belt",
+      "description": "Distressed leather with a burnished, antiqued buckle — pre-loved looks without the hunt.",
+      "price": "1.43",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-organic",
+      "name": "Organic Belt",
+      "description": "Vegetable-tanned leather from certified hides, dyed with plant pigments.",
+      "price": "1.56",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-heavyweight",
+      "name": "Heavyweight Belt",
+      "description": "A thick 4-mm work belt with a double-prong roller buckle. Holds tools, outlasts trousers.",
+      "price": "1.68",
+      "category": "Accessories"
+    },
+    {
+      "id": "accessories-premium",
+      "name": "Premium Belt",
+      "description": "Italian bridle leather, solid-brass hardware and edge-painted finishing. A decade of daily wear in it.",
+      "price": "1.80",
+      "category": "Accessories"
+    },
+    {
+      "id": "activewear-gym-vest",
+      "name": "Gym Vest",
+      "description": "Dropped armholes and a long back hem, in a jersey that moves before you do.",
+      "price": "1.10",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-training-tee",
+      "name": "Training Tee",
+      "description": "A light, quick-drying knit with flatlock seams that don't chafe on the twelfth rep.",
+      "price": "1.15",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-sweat-short",
+      "name": "Sweat Short",
+      "description": "Loopback cotton with an elastic waist — the pair you keep wearing after training.",
+      "price": "1.25",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-running-short",
+      "name": "Running Short",
+      "description": "A five-inch split hem, a mesh liner, and a zip pocket that holds a key without bouncing.",
+      "price": "1.35",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-compression-top",
+      "name": "Compression Top",
+      "description": "A second-skin base layer that holds without squeezing. Wears alone or under everything.",
+      "price": "1.45",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-seamless-legging",
+      "name": "Seamless Legging",
+      "description": "Knitted in one piece so there is nothing to rub, with a wide waistband that stays up.",
+      "price": "1.85",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-track-pant",
+      "name": "Track Pant",
+      "description": "Tapered through the leg with ankle zips, in a smooth tricot that packs flat.",
+      "price": "1.95",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-cycling-jersey",
+      "name": "Cycling Jersey",
+      "description": "Three rear pockets, a half zip, and a hem gripper that stays put on the drops.",
+      "price": "2.05",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-windbreaker",
+      "name": "Packable Windbreaker",
+      "description": "Featherweight ripstop that folds into its own pocket. Cuts the wind, shrugs off a shower.",
+      "price": "2.10",
+      "category": "Activewear"
+    },
+    {
+      "id": "activewear-performance-hoodie",
+      "name": "Performance Hoodie",
+      "description": "Brushed technical fleece: warm at the start line, breathable by the second mile.",
+      "price": "2.20",
+      "category": "Activewear"
+    },
+    {
+      "id": "loungewear-sleep-tee",
+      "name": "Sleep Tee",
+      "description": "Washed-soft cotton cut long — the shirt that migrates from bed to doorstep.",
+      "price": "0.95",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-sleep-short",
+      "name": "Sleep Short",
+      "description": "Feather-light cotton with an easy elastic waist, for rooms that run warm.",
+      "price": "1.05",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-slipper-sock",
+      "name": "Slipper Sock",
+      "description": "Chunky knit with a grip sole: a sock that behaves like a slipper.",
+      "price": "1.15",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-thermal-longsleeve",
+      "name": "Thermal Long-Sleeve",
+      "description": "A ribbed thermal that layers under everything in winter and stands alone by the fire.",
+      "price": "1.50",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-lounge-pant",
+      "name": "Lounge Pant",
+      "description": "Wide, soft and unhurried, with a drawcord waist and deep side pockets.",
+      "price": "1.60",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-waffle-henley",
+      "name": "Waffle Henley",
+      "description": "A three-button placket in a waffle knit that traps warmth without weight.",
+      "price": "1.75",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-fleece-pant",
+      "name": "Fleece Pant",
+      "description": "Heavy brushed fleece with elastic cuffs, for the coldest room in the house.",
+      "price": "1.80",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-lounge-hoodie",
+      "name": "Lounge Hoodie",
+      "description": "Unbrushed loopback so it never gets stuffy, with a hood that actually sits up.",
+      "price": "1.90",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-pyjama-set",
+      "name": "Pyjama Set",
+      "description": "Piped poplin, two pieces — the kind of thing you would answer a video call in.",
+      "price": "2.05",
+      "category": "Loungewear"
+    },
+    {
+      "id": "loungewear-robe",
+      "name": "Cotton Robe",
+      "description": "A midweight terry robe with a shawl collar and a belt that stays tied.",
+      "price": "2.10",
+      "category": "Loungewear"
+    },
+    {
+      "id": "swimwear-swim-brief",
+      "name": "Swim Brief",
+      "description": "Trim and chlorine-resistant, cut for lane swimming rather than lounging.",
+      "price": "1.00",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-swim-cap",
+      "name": "Swim Cap",
+      "description": "Seamless silicone that pulls on without dragging hair, and stays on off the blocks.",
+      "price": "1.10",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-bikini-top",
+      "name": "Bikini Top",
+      "description": "Adjustable ties and removable cups, in a fabric that dries on the walk home.",
+      "price": "1.40",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-tankini",
+      "name": "Tankini Top",
+      "description": "Longer than a bikini top and easier to swim in, with a shirred front that skims.",
+      "price": "1.50",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-swim-short",
+      "name": "Swim Short",
+      "description": "Quick-dry recycled poly with a mesh liner and a hem that lands above the knee.",
+      "price": "1.55",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-cover-up",
+      "name": "Beach Cover-Up",
+      "description": "An open-weave cotton throw-on for the walk between the water and lunch.",
+      "price": "1.65",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-sand-free-towel",
+      "name": "Sand-Free Towel",
+      "description": "A flat-woven towel that shakes clean and dries in half the time of terry.",
+      "price": "1.70",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-board-short",
+      "name": "Board Short",
+      "description": "Longer, with a lace-up fly and a stretch panel where it matters.",
+      "price": "1.85",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-rash-guard",
+      "name": "Rash Guard",
+      "description": "Long-sleeve UPF 50+ with flat seams — the layer that buys a second day in the sun.",
+      "price": "1.95",
+      "category": "Swimwear"
+    },
+    {
+      "id": "swimwear-one-piece",
+      "name": "One-Piece",
+      "description": "A clean scoop back in a heavier knit that holds its shape past the first season.",
+      "price": "2.15",
+      "category": "Swimwear"
+    },
+    {
+      "id": "bags-drawstring",
+      "name": "Drawstring Sack",
+      "description": "The gym-bag basic: light, packable, and impossible to lose in a locker.",
+      "price": "0.80",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-shopper",
+      "name": "Folding Shopper",
+      "description": "Folds down to the size of a wallet and carries a week of groceries.",
+      "price": "0.95",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-canvas-tote",
+      "name": "Canvas Tote",
+      "description": "Twelve-ounce cotton canvas with a flat base, so it stands up when you set it down.",
+      "price": "1.20",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-belt-bag",
+      "name": "Belt Bag",
+      "description": "Worn at the hip or across the chest, with a zip that opens towards you.",
+      "price": "1.30",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-laptop-sleeve",
+      "name": "Laptop Sleeve",
+      "description": "Felt-lined and slim enough to slide into a bag you already own.",
+      "price": "1.35",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-crossbody",
+      "name": "Crossbody Pouch",
+      "description": "Phone, cards, keys — the three things, on a webbing strap you can shorten.",
+      "price": "1.45",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-toiletry",
+      "name": "Toiletry Case",
+      "description": "A wipe-clean lining and a hook, for hotel bathrooms with no counter.",
+      "price": "1.55",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-card-wallet",
+      "name": "Card Wallet",
+      "description": "Four slots and a note pocket, in a leather that softens within a month.",
+      "price": "1.75",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-duffel",
+      "name": "Weekend Duffel",
+      "description": "Two nights' worth, with a removable shoulder strap and a pocket for shoes.",
+      "price": "2.45",
+      "category": "Bags"
+    },
+    {
+      "id": "bags-backpack",
+      "name": "Day Backpack",
+      "description": "One big compartment, one padded sleeve, and straps that spread the load.",
+      "price": "2.60",
+      "category": "Bags"
+    },
+    {
+      "id": "shoes-espadrille",
+      "name": "Espadrille",
+      "description": "Jute sole, canvas upper — summer shoes that weigh nothing in a bag.",
+      "price": "1.50",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-slide",
+      "name": "Pool Slide",
+      "description": "Moulded EVA that dries instantly: the shoe for the ten metres after a swim.",
+      "price": "1.55",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-sandal",
+      "name": "Two-Strap Sandal",
+      "description": "Adjustable at the instep and the ankle, with a footbed that moulds in.",
+      "price": "1.60",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-slip-on",
+      "name": "Slip-On",
+      "description": "No laces, elastic gores, and a heel you can crush without guilt.",
+      "price": "1.75",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-canvas-sneaker",
+      "name": "Canvas Sneaker",
+      "description": "A vulcanised rubber sole and a cotton upper — the shoe that goes with everything.",
+      "price": "1.90",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-skate-shoe",
+      "name": "Skate Shoe",
+      "description": "A reinforced ollie patch and a grippy waffle outsole, built to be worn out.",
+      "price": "2.20",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-high-top",
+      "name": "High-Top",
+      "description": "Ankle support and a padded collar, in the silhouette that never left.",
+      "price": "2.35",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-court-trainer",
+      "name": "Court Trainer",
+      "description": "A low-profile leather trainer on a cupsole that keeps its shape.",
+      "price": "2.60",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-chelsea-boot",
+      "name": "Chelsea Boot",
+      "description": "Elastic sides, a pull tab, and a sole that handles a wet pavement.",
+      "price": "2.85",
+      "category": "Shoes"
+    },
+    {
+      "id": "shoes-runner",
+      "name": "Everyday Runner",
+      "description": "Cushioned enough for a commute and a 5k, light enough to forget you have it on.",
+      "price": "2.90",
+      "category": "Shoes"
     }
   ]
 }
