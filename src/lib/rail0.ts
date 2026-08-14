@@ -1,8 +1,10 @@
 import { checksumAddress, type Eip3009Signature, Rail0Client } from "@rail0/sdk";
 import { env } from "./env";
 
-// Seller only on this branch: the buyer's key never reaches the server, so
-// there is no buyer role to hold a server-side session for (see lib/buyer.ts).
+// Seller only: this holds LONG-LIVED gateway sessions, and a buyer has none to
+// hold. A human buyer signs in their own wallet, and the configured-key buyer
+// (lib/buyer-signer) gets a session per checkout, stashed with the checkout —
+// not cached here.
 type Role = "seller";
 
 interface Session {

@@ -1,12 +1,12 @@
 import {
   checksumAddress,
-  type Eip3009Signature,
   type PaymentDetail,
   personalSign,
   type SigningPayload,
   signPayment,
 } from "@rail0/sdk";
 import { env } from "./env";
+import { packSignature } from "./rail0";
 
 /**
  * Server-side signing for a LOCALLY CONFIGURED buyer key.
@@ -27,11 +27,6 @@ import { env } from "./env";
  * key is never pasted now — it is either already configured here, or the buyer connects
  * MetaMask.
  */
-
-/** Pack { v, r, s } into the 65-byte r||s||v hex the gateway expects. */
-export function pack(sig: Eip3009Signature): string {
-  return `${sig.r}${sig.s.slice(2)}${sig.v.toString(16).padStart(2, "0")}`;
-}
 
 /**
  * Whether the configured-buyer signer may be used at all.
@@ -56,7 +51,7 @@ export function buyerSignerEnabled(input: {
  * Reads the gate and the value together so no caller can accidentally use one without
  * the other — every route here starts from this function.
  */
-export function configuredBuyerKey(): string | null {
+function configuredBuyerKey(): string | null {
   const key = env().BUYER_PRIVATE_KEY;
   return buyerSignerEnabled({ nodeEnv: process.env.NODE_ENV, key }) ? (key ?? null) : null;
 }
@@ -85,7 +80,7 @@ export function signAsBuyer(request: SignRequest): string {
 
   return request.kind === "message"
     ? personalSign(key, request.message)
-    : pack(
+    : packSignature(
         signPayment(
           key as `0x${string}`,
           {
