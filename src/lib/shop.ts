@@ -1,6 +1,7 @@
 import { formatAmount, signTransaction } from "@rail0/sdk";
 import { env } from "./env";
 import {
+  exactAmount,
   type Order,
   type OrderToken,
   orderFrom,
@@ -235,8 +236,14 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
 export async function captureOrder(rail0Id: string): Promise<Order> {
   const order = await requireOrderInState(rail0Id, "in_escrow");
   const seller = await clientFor("seller");
-  // capture/refund prepare, like create, take the HUMAN decimal amount.
-  const prep = await seller.payments.capturePrepare(rail0Id, order.total);
+  // capture/refund prepare, like create, take the HUMAN decimal amount — the WHOLE of
+  // it, converted from base units here rather than reusing `order.total`. That field is
+  // rounded to two places for people to read, and capturing a rounded figure would
+  // either leave dust in escrow or ask for more than is there.
+  const prep = await seller.payments.capturePrepare(
+    rail0Id,
+    exactAmount(order.total_base, order.token.decimals),
+  );
   if (!prep.unsigned_transaction) {
     throw new ShopError(502, "gateway returned no unsigned capture transaction");
   }

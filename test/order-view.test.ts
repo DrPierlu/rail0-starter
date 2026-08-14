@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   type CartLine,
+  displayAmount,
+  exactAmount,
   type OrderToken,
   orderFrom,
   type PaymentLike,
@@ -140,7 +142,9 @@ describe("orderFrom", () => {
     expect(order.id).toBe("0xabc");
     expect(order.rail0_id).toBe("0xabc");
     expect(order.state).toBe("in_escrow");
-    expect(order.total).toBe("4.490000");
+    // Two decimals, not the token's six: what a person reads must not depend on how
+    // many places the chain's stablecoin happens to carry.
+    expect(order.total).toBe("4.49");
     expect(order.total_base).toBe("4490000");
     expect(order.lines).toHaveLength(2);
     expect(order.token.symbol).toBe("USDC");
@@ -162,6 +166,45 @@ describe("orderFrom", () => {
     const bare = orderFrom({ rail0_id: "0xdef", status: "signed", amount: "0" }, token);
     expect(bare.lines).toEqual([]);
     expect(bare.state).toBe("awaiting_payment");
-    expect(bare.total).toBe("0.000000");
+    expect(bare.total).toBe("0.00");
+  });
+});
+
+/**
+ * A token's decimals are a property of the chain, and USDC's six turned every total in
+ * the app into "1.250000" — in the chat, the order card and the merchant's list. These
+ * pin the two halves of the fix: what is SHOWN is always two places, and what is
+ * COMPUTED with (a capture asks the gateway for a human decimal amount) keeps all of
+ * them.
+ */
+describe("amount formatting", () => {
+  it("shows two decimals whatever the token carries", () => {
+    expect(displayAmount("4490000", 6)).toBe("4.49");
+    expect(displayAmount("1250000000000000000", 18)).toBe("1.25");
+    expect(displayAmount("725", 2)).toBe("7.25");
+    expect(displayAmount("7", 0)).toBe("7.00");
+    expect(displayAmount("0", 6)).toBe("0.00");
+  });
+
+  it("rounds anything finer than a cent to the nearest one, half up", () => {
+    // Which cannot arise from this catalog — every price is whole cents — but can from
+    // a payment made elsewhere against the same merchant.
+    expect(displayAmount("1234567", 6)).toBe("1.23");
+    expect(displayAmount("1235000", 6)).toBe("1.24");
+    expect(displayAmount("1239999", 6)).toBe("1.24");
+    // Dust below half a cent reads as zero, which is the honest rendering of it: the
+    // authoritative figure is total_base, and that keeps every digit.
+    expect(displayAmount("1", 6)).toBe("0.00");
+  });
+
+  it("never throws on an amount it cannot read", () => {
+    expect(displayAmount("", 6)).toBe("0.00");
+    expect(displayAmount("not a number", 6)).toBe("0.00");
+  });
+
+  it("keeps every digit in the exact form", () => {
+    expect(exactAmount("4490000", 6)).toBe("4.490000");
+    expect(exactAmount("1234567", 6)).toBe("1.234567");
+    expect(exactAmount("7", 0)).toBe("7");
   });
 });

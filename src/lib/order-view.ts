@@ -45,6 +45,10 @@ export interface Order {
   id: string;
   state: OrderState;
   lines: CartLine[];
+  /**
+   * The total as a person reads it: always exactly two decimals, whatever the token's
+   * own precision. Display only — `total_base` is the authoritative figure.
+   */
   total: string;
   total_base: string;
   token: OrderToken;
@@ -163,11 +167,47 @@ export function stateOf(payment: PaymentLike): OrderState {
   return "awaiting_payment";
 }
 
-/** Base units to a human decimal, exactly — see agent-budget for why not division. */
-function decimal(amount: string, decimals: number): string {
+/**
+ * Base units to a human decimal, exactly — see agent-budget for why not division.
+ *
+ * This is the figure to COMPUTE with (a capture asks the gateway for a human decimal
+ * amount, and it must be the whole of it). `displayAmount` is the figure to SHOW.
+ */
+export function exactAmount(amount: string, decimals: number): string {
   const digits = amount.replace(/^0+(?=\d)/, "").padStart(decimals + 1, "0");
   const whole = digits.slice(0, digits.length - decimals);
   return decimals > 0 ? `${whole}.${digits.slice(digits.length - decimals)}` : whole;
+}
+
+/**
+ * The same amount as a person reads it: two decimals, always.
+ *
+ * A token's decimals are a property of the CHAIN, not of the price — USDC's six turned
+ * "1.25" into "1.250000" everywhere an order was shown, in the chat, the order card and
+ * the merchant's list. Money in this app is quoted in cents (the catalog is), so two
+ * places is the whole of the number and the rest is the contract's business.
+ *
+ * Anything finer than a cent — which cannot come from this catalog, but can come from a
+ * payment made elsewhere — is rounded half-up rather than dropped, so a displayed total
+ * is never LESS than what was actually paid. BigInt throughout: the values are base-unit
+ * strings, and a stablecoin balance loses float precision long before it looks wrong.
+ */
+export function displayAmount(amount: string, decimals: number): string {
+  let units: bigint;
+  try {
+    units = BigInt(amount || "0");
+  } catch {
+    return "0.00";
+  }
+  let cents: bigint;
+  if (decimals >= 2) {
+    const scale = 10n ** BigInt(decimals - 2);
+    const remainder = units % scale;
+    cents = units / scale + (remainder * 2n >= scale ? 1n : 0n);
+  } else {
+    cents = units * 10n ** BigInt(2 - decimals);
+  }
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
 }
 
 /** The order this payment is. `token` supplies what the payment does not carry. */
@@ -179,7 +219,7 @@ export function orderFrom(payment: PaymentLike, token: OrderToken): Order {
     rail0_id: payment.rail0_id ?? "",
     state: stateOf(payment),
     lines: unpackLines(payment.metadata),
-    total: decimal(base, token.decimals),
+    total: displayAmount(base, token.decimals),
     total_base: base,
     token,
     payment_status: payment.status,
