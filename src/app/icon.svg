@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000" role="img" aria-label="Vercel">
+  <title>Vercel</title>
+  <!--
+    The tab icon. Without one the browser shows its generic globe, which is what this
+    replaces.
+
+    The Vercel triangle, at the canonical 1155x1000 viewBox so the mark keeps its own
+    proportions rather than being stretched into a square.
+
+    Two fills: browsers honour prefers-color-scheme inside an SVG favicon, and the
+    triangle is a solid shape — black on a dark tab strip is an invisible icon.
+  -->
+  <style>
+    path { fill: #0a0a0a; }
+    @media (prefers-color-scheme: dark) { path { fill: #fafafa; } }
+  </style>
+  <path d="m577.3 0 577.4 1000H0z" />
+</svg>
