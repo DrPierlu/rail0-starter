@@ -19,12 +19,12 @@ const POLL_MS = 5000;
 /**
  * How many orders the dashboard opens with, and how many more each click adds.
  *
- * Ten because the list is polled: every tick is a gateway page, and a shop with a
+ * Small because the list is polled: every tick is a gateway page, and a shop with a
  * thousand orders would fetch all of them every five seconds to show the handful anyone
  * is actually looking at. Growing the window rather than paging keeps the poll simple —
  * there is one request and one list, just a longer one.
  */
-const PAGE = 10;
+const PAGE = 5;
 
 /**
  * The submitted-action map, narrowed to the orders the list still calls escrowed.

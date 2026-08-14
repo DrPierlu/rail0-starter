@@ -3,8 +3,8 @@ import { errorResponse } from "@/lib/http";
 import { requireMerchant } from "@/lib/merchant-auth";
 import { readOrders } from "@/lib/shop";
 
-/** What the dashboard asks for first, and what it may grow to in one request. */
-const DEFAULT_LIMIT = 10;
+/** What the dashboard asks for first (keep it in step with PAGE there), and its ceiling. */
+const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 100;
 
 /**
