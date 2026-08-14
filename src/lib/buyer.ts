@@ -1,17 +1,22 @@
 import { randomBytes } from "node:crypto";
 import { buildSiweMessage, Rail0ApiError, Rail0Client, type SigningPayload } from "@rail0/sdk";
+import { agentWalletAddress, signAsAgent } from "./buyer-signer";
 import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
 import type { Order } from "./store";
 
-// Buyer-side payment flow. Every buyer signature (the SIWE login and the EIP-3009
-// payment authorization) is produced at the browser's request — by MetaMask, or by
-// the locally configured key in lib/buyer-signer — and handed to the storefront
-// out-of-band (the signature stash in the store), never through the model's context
-// where a mangled hex digit would burn the payment. The checkout is therefore three
-// tool steps, each pausing for the browser to sign.
+// Buyer-side payment flow, in two shapes over the SAME three steps.
 //
-// Nothing here ever sees a buyer key: this module composes signatures it is given.
+//   A person buying: the two signatures (the SIWE login and the EIP-3009 payment
+//   authorization) come from their browser wallet, so each step parks a card in the
+//   chat and stops. Three tool calls, two waits.
+//
+//   The agent buying: it holds the key (lib/buyer-signer), so checkoutAsAgent runs
+//   the same three steps back to back with nobody to wait for.
+//
+// Either way the signatures reach the storefront out-of-band, through the signing
+// stash — never through the model's context, where a mangled hex digit would burn the
+// payment.
 
 // The statement POST /auth requires, verbatim. The gateway asserts it exactly
 // (gateway#147), which is what stops a login proof from being replayed to register
@@ -317,4 +322,44 @@ export async function submitSignedPayment(
 
   await clearSigning(orderId);
   return { order: attached.order, rail0_id: entry.rail0_id };
+}
+
+/**
+ * The whole checkout, start to finish, signed by the AGENT'S OWN WALLET.
+ *
+ * This is the same three steps as the browser flow — it calls them, rather than
+ * reimplementing them, so every hard-won behaviour they carry (the single-use SIWE
+ * nonce, the auth-token reuse on retry, the idempotent sign, the write-ahead) applies
+ * here unchanged. The only difference is who produces the two signatures and when: the
+ * browser path parks a card in the chat and waits for a human, and this one signs
+ * inline and keeps going.
+ *
+ * It writes the signatures into the same stash the browser posts to, for the same
+ * reason: the later steps read them from there, and giving them a second source would
+ * be two ways to be in the same state.
+ *
+ * The caller decides WHETHER to run this — that decision is a spending decision (see
+ * withinAutonomousLimit), not a mechanical one, and it belongs with the tool that has
+ * the cart and the approval policy.
+ */
+export async function checkoutAsAgent(
+  base: string,
+  items: { product_id: string; qty: number }[],
+  chainId: number,
+  tokenAddress: string,
+): Promise<{ order: Order; rail0_id: string }> {
+  const address = agentWalletAddress();
+  if (!address) throw new Error("no agent wallet configured");
+
+  const begun = await beginCheckout(base, items, chainId, tokenAddress, address);
+  await putSigning(begun.order.id, {
+    siwe_signature: signAsAgent({ kind: "message", message: begun.siwe_message }),
+  });
+
+  const created = await createPaymentForOrder(base, begun.order.id);
+  await putSigning(begun.order.id, {
+    eip3009_signature: signAsAgent({ kind: "typed_data", payload: created.signing_payload }),
+  });
+
+  return await submitSignedPayment(base, begun.order.id);
 }

@@ -68,6 +68,28 @@ export function removeLine(
   });
 }
 
+/**
+ * What the cart comes to, as a human decimal string.
+ *
+ * Summed in integer cents, not in floating point: prices are two-decimal decimals, and
+ * 2.60 + 1.89 in binary floating point is 4.489999999999999, which then reads as a
+ * different total than the order the storefront creates. The merchant's own total is
+ * still the authority — this exists so the spending ceiling can be checked BEFORE an
+ * order is created, which is the only moment the check is worth anything.
+ *
+ * Prices come from the catalog, so a malformed one is a broken catalog rather than user
+ * input; NaN would silently compare as "under the ceiling", so it becomes 0 lines and
+ * an unusable total the caller escalates on instead.
+ */
+export function cartTotal(lines: readonly CartLine[]): string {
+  const cents = lines.reduce((sum, line) => {
+    const price = Math.round(Number(line.price) * 100);
+    if (!Number.isFinite(price)) return Number.NaN;
+    return sum + price * line.qty;
+  }, 0);
+  return Number.isFinite(cents) ? (cents / 100).toFixed(2) : "NaN";
+}
+
 // ── State-bound helpers (the tools' surface) ──────────────────────────
 
 export async function getCart(): Promise<CartLine[]> {

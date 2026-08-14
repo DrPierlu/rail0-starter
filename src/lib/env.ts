@@ -14,18 +14,22 @@ const schema = z.object({
   SELLER_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/, {
     message: "SELLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex key",
   }),
-  // Optional, and a LOCAL DEVELOPMENT CONVENIENCE ONLY — lib/buyer-signer.ts
-  // refuses to use it outside `next dev`. A real buyer signs in their own
-  // browser wallet; this exists so a demo on your own machine does not need
-  // MetaMask, and it replaced a UI that asked the buyer to paste a private key
-  // into a form. Optional HERE and gated where it is read, like MERCHANT_TOKEN:
-  // the app must run fine without it (the buyer connects MetaMask instead).
+  // The AGENT'S wallet: set it and this deployment's agent can buy on its own,
+  // up to BUYER_MAX_ORDER. Unset, the buyer is a person with MetaMask and the
+  // checkout waits for their signatures. Optional HERE and required by whatever
+  // reads it (lib/buyer-signer), like MERCHANT_TOKEN — the app must run fine
+  // without it, because running without it is the normal case.
   BUYER_PRIVATE_KEY: z
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, {
       message: "BUYER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex key",
     })
     .optional(),
+  // Largest order the agent pays for unattended, as a decimal in the payment
+  // stablecoin. 0 removes the ceiling. Over it, the checkout asks a human to
+  // approve rather than refusing — see autonomousOrderLimit in lib/buyer-signer
+  // for why a ceiling has to exist once the agent holds the key.
+  BUYER_MAX_ORDER: z.coerce.number().nonnegative().default(25),
   SIWE_CHAIN_ID: z.coerce.number().int().default(1),
   AI_MODEL: z.string().default("claude-sonnet-5"),
   // Optional HERE and required by the gate that reads it (lib/merchant-auth.ts):
@@ -47,6 +51,7 @@ export function env(): Env {
       GATEWAY_URL: process.env.GATEWAY_URL || undefined,
       SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
       BUYER_PRIVATE_KEY: process.env.BUYER_PRIVATE_KEY || undefined,
+      BUYER_MAX_ORDER: process.env.BUYER_MAX_ORDER || undefined,
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
       MERCHANT_TOKEN: process.env.MERCHANT_TOKEN || undefined,

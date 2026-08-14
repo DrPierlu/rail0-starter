@@ -4,19 +4,30 @@ description: Use when the shopper is ready to buy — running the three-step rai
 
 # Running a rail0 escrow checkout
 
-The buyer's key lives in THEIR browser wallet, never on this server. That is the whole
-reason this is three steps with two signatures: you cannot sign for them, so each step
-hands a card to the chat and waits.
+There are two shapes, and `checkout_begin` tells you which one you are in from its
+result. Read that result rather than assuming.
+
+**Autonomous** (`step: "done"`). This deployment has its own wallet, so the checkout
+already ran end to end — order created, paid, in escrow. There is no card, nothing to
+wait for, and nobody to ask for a signature. Report what happened and poll
+`order_status` until the escrow confirms. Do NOT call `checkout_payment` or
+`checkout_submit`: there is nothing left for them to do.
+
+**Human buyer** (`step: "sign_login"`). The buyer's key lives in THEIR browser wallet,
+never on this server, so you cannot sign for them: it is three steps with two
+signatures, and each step hands a card to the chat and waits.
 
 ## Before you start
 
 Confirm with the shopper first: show the cart lines, the total, and the chosen chain and
 stablecoin, then wait for an explicit yes. Never start a checkout on an implied one.
 
-You need a wallet address, and it arrives in the client context — never guess it, and
-never ask the shopper to type it. If there is none, ask them to connect a wallet and stop.
+Pass the wallet address from the client context when there is one — never guess it, and
+never ask the shopper to type it. When there is none, still call `checkout_begin`: on a
+deployment with its own wallet that is the normal case and the checkout runs anyway. It
+answers with an error asking for a connected wallet when it genuinely needs one.
 
-## The three steps
+## The three steps (human buyer)
 
 1. **`checkout_begin`** — creates the order and the sign-in challenge. It renders a
    sign-in card. **Stop your turn and wait.**

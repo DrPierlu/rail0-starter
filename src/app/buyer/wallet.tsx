@@ -4,17 +4,14 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import type { SigningPayload } from "@rail0/sdk";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-// The buyer's wallet. Two backends, and NEITHER holds a private key in this tab:
+// The buyer's wallet: MetaMask, and only MetaMask. The key stays in the extension, so
+// this tab never holds one — the page asks for a signature and receives a signature.
 //
-//   metamask   — the key stays in the extension; the browser asks it to sign.
-//   configured — a BUYER_PRIVATE_KEY set in .env.local for local development. The
-//                key stays on the server (lib/buyer-signer); this asks
-//                /api/buyer/signer for a signature the same way it asks MetaMask.
-//
-// A key is never pasted into the page. The form that used to accept one is gone: a
-// private key typed into a web form is the one credential this app should never
-// handle, and the configured backend covers the case it existed for (a demo on your
-// own machine, with no extension installed).
+// A key is never pasted into the page either; the form that used to accept one is gone,
+// because a private key typed into a web form is the one credential this app should
+// never handle. Running a demo without an extension is a server-side concern now
+// (BUYER_PRIVATE_KEY, lib/buyer-signer): with it set the AGENT buys on its own and this
+// component is not involved at all.
 
 interface EthereumProvider {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
@@ -30,7 +27,6 @@ declare global {
 }
 
 export interface Wallet {
-  kind: "metamask" | "configured";
   /** EIP-55 checksummed — the gateway's SIWE parser rejects lowercase. */
   address: string;
   signMessage(message: string): Promise<string>;
@@ -47,32 +43,6 @@ interface WalletContextValue {
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
-
-/**
- * Ask the server to sign with the configured buyer key, and return the signature.
- *
- * The key is never fetched — only the signature comes back, so a devtools console or a
- * page-level extension has nothing to read here. A failure is surfaced with the
- * server's own message: this path only exists in local development, and "the signer
- * said no" is exactly what the developer needs to see.
- */
-async function signViaServer(
-  request: { kind: "message"; message: string } | { kind: "typed_data"; payload: SigningPayload },
-): Promise<string> {
-  const response = await fetch("/api/buyer/signer", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  const body = (await response.json().catch(() => ({}))) as {
-    signature?: string;
-    error?: string;
-  };
-  if (!response.ok || !body.signature) {
-    throw new Error(body.error ?? "the configured signer refused the request");
-  }
-  return body.signature;
-}
 
 export function useWallet(): WalletContextValue {
   const ctx = useContext(WalletContext);
@@ -174,11 +144,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // render now agree on false, and the effect flips it.
   const [hasMetaMask, setHasMetaMask] = useState(false);
   useEffect(() => setHasMetaMask(!!window.ethereum), []);
-  // Set by an explicit disconnect, and read by the auto-connect below so it cannot
-  // immediately re-attach the configured wallet the user just dropped — which would
-  // read as a disconnect button that does nothing. Mount-scoped on purpose: a reload
-  // is a fresh start, and the configured signer is the machine's own setting.
-  const [dropped, setDropped] = useState(false);
 
   // One place that turns an address into a MetaMask-backed Wallet — used by the
   // initial connect, by the account switch, and by the accountsChanged handler, so
@@ -186,7 +151,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const metaMaskWallet = useCallback((rawAddress: string): Wallet => {
     const address = toChecksumAddress(rawAddress);
     return {
-      kind: "metamask",
       address,
       signMessage: async (message) => {
         const ethereum = window.ethereum;
@@ -234,20 +198,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setWallet(metaMaskWallet(accounts[0]));
   }, [metaMaskWallet]);
 
-  // A wallet backed by the key configured on the server (local development only).
-  // Shaped exactly like the MetaMask one so every caller — the signing card, the
-  // checkout panel, the client context on each turn — stays backend-agnostic; the
-  // only difference is who is asked for the signature.
-  const configuredWallet = useCallback(
-    (address: string): Wallet => ({
-      kind: "configured",
-      address: toChecksumAddress(address),
-      signMessage: (message) => signViaServer({ kind: "message", message }),
-      signTypedData: (payload) => signViaServer({ kind: "typed_data", payload }),
-    }),
-    [],
-  );
-
   // Forgetting the wallet locally is not disconnecting: MetaMask keeps the account
   // permitted, so the next connect resolves silently with it and there is no way to
   // pick another. Revoking the eth_accounts permission (EIP-2255) makes the next
@@ -255,12 +205,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   //
   // Best-effort: a provider that does not implement wallet_revokePermissions throws,
   // and the local state must still be cleared — refusing to disconnect because the
-  // wallet would not cooperate is the wrong failure. The configured case has nothing
-  // to revoke: it is this machine's own .env.local, not a granted permission.
+  // wallet would not cooperate is the wrong failure.
   const disconnect = useCallback(async () => {
-    setDropped(true);
     const ethereum = window.ethereum;
-    if (wallet?.kind === "metamask" && ethereum) {
+    if (wallet && ethereum) {
       try {
         await ethereum.request({
           method: "wallet_revokePermissions",
@@ -307,46 +255,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
   }, [metaMaskWallet]);
 
-  // Attach the configured signer, when this machine has one.
-  //
-  // Runs before the buyer is asked for anything: with BUYER_PRIVATE_KEY set, the chat
-  // opens already connected and checkout never has to stop and ask. Without it the
-  // route 404s and nothing happens here — the buyer connects MetaMask instead, which
-  // is the only path a deployed instance has.
-  //
-  // MetaMask wins if it got there first (`current ?? …`): an extension the person
-  // actually chose outranks a convenience default, and this must not silently move
-  // the checkout to a different address mid-conversation.
-  useEffect(() => {
-    if (dropped) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch("/api/buyer/signer");
-        if (!response.ok) return;
-        const { address } = (await response.json()) as { address?: string };
-        if (!cancelled && address) {
-          setWallet((current) => current ?? configuredWallet(address));
-        }
-      } catch {
-        // No signer route, or the app is not running one: stay disconnected.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [configuredWallet, dropped]);
-
   // Follow the wallet when the user switches account (or disconnects the site) from
   // inside MetaMask, instead of holding an address the extension no longer controls —
   // which would only surface as a confusing signature failure at checkout. An empty
   // array is MetaMask saying the site is no longer permitted.
-  //
-  // Only while a MetaMask wallet is connected: the configured signer is unrelated to
-  // the extension and must not be cleared by its events.
   useEffect(() => {
     const ethereum = window.ethereum;
-    if (!ethereum?.on || wallet?.kind !== "metamask") return;
+    if (!ethereum?.on || !wallet) return;
     const onAccountsChanged = (...args: never[]) => {
       const accounts = args[0] as unknown as string[] | undefined;
       if (!accounts?.length) {
@@ -357,7 +272,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
     ethereum.on("accountsChanged", onAccountsChanged);
     return () => ethereum.removeListener?.("accountsChanged", onAccountsChanged);
-  }, [wallet?.kind, metaMaskWallet]);
+  }, [wallet, metaMaskWallet]);
 
   const value = useMemo(
     () => ({ wallet, hasMetaMask, connectMetaMask, switchMetaMask, disconnect }),
@@ -400,10 +315,9 @@ export function WalletConnect({ className = "" }: { className?: string }) {
           {busy ? "Waiting for MetaMask…" : "Connect MetaMask"}
         </button>
       ) : (
-        // No extension AND no configured signer (that one attaches on its own, so
-        // reaching here means there is none). Say what to do rather than render an
-        // empty row — the alternative used to be "paste a key", which is exactly the
-        // affordance this app no longer offers.
+        // No extension. Say what to do rather than render an empty row — the
+        // alternative used to be "paste a key", which is exactly the affordance this
+        // app no longer offers.
         <span className="text-neutral-500">
           No wallet detected. Install MetaMask to pay, or set BUYER_PRIVATE_KEY in .env.local to run
           this demo without one.
@@ -445,10 +359,8 @@ export function WalletChip() {
         <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-emerald-700 dark:text-emerald-400">
           {wallet.address.slice(0, 6)}…{wallet.address.slice(-4)}
         </span>
-        <span className="text-neutral-400">
-          {wallet.kind === "metamask" ? "MetaMask" : "configured key"}
-        </span>
-        {wallet.kind === "metamask" && (
+        <span className="text-neutral-400">MetaMask</span>
+        {
           <button
             type="button"
             onClick={run(switchMetaMask)}
@@ -458,16 +370,12 @@ export function WalletChip() {
           >
             switch
           </button>
-        )}
+        }
         <button
           type="button"
           onClick={run(disconnect)}
           disabled={busy}
-          title={
-            wallet.kind === "metamask"
-              ? "Forget this wallet and revoke the site's access, so the next connect lets you pick another"
-              : "Forget this key (it was only ever in this tab)"
-          }
+          title="Forget this wallet and revoke the site's access, so the next connect lets you pick another"
           className="text-neutral-400 hover:underline disabled:opacity-50"
         >
           disconnect

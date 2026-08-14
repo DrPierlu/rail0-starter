@@ -154,11 +154,7 @@ export function SigningCard({
             onClick={sign}
             className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-black"
           >
-            {state === "signing"
-              ? "Waiting for the wallet…"
-              : wallet.kind === "metamask"
-                ? "Sign with MetaMask"
-                : "Sign with the configured key"}
+            {state === "signing" ? "Waiting for the wallet…" : "Sign with MetaMask"}
           </button>
         ) : (
           // The connect controls are HERE, not in a strip at the top of the page: this

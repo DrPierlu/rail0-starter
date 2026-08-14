@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CartLine, mergeLine, removeLine } from "../agent/lib/cart";
+import { type CartLine, cartTotal, mergeLine, removeLine } from "../agent/lib/cart";
 
 // The cart moved from the merchant's store to the AGENT's session state (#5), and
 // eve's defineState only resolves inside its runtime — so the rules live in pure
@@ -47,5 +47,38 @@ describe("removeLine", () => {
   it("leaves the cart alone for an unknown product", () => {
     const lines = [line("a", 1)];
     expect(removeLine(lines, "zzz", 1)).toEqual(lines);
+  });
+});
+
+describe("cartTotal", () => {
+  const priced = (price: string, qty: number): CartLine => ({
+    product_id: `p-${price}`,
+    name: "P",
+    price,
+    qty,
+  });
+
+  it("sums price by quantity", () => {
+    expect(cartTotal([priced("2.60", 2), priced("1.89", 1)])).toBe("7.09");
+  });
+
+  it("is exact where floating point is not", () => {
+    // 2.60 + 1.89 in binary floating point is 4.489999999999999, which would then
+    // disagree with the order the storefront creates. Summed in integer cents it does
+    // not — and this total gates spending, so "close enough" is not a property it may
+    // have.
+    expect(cartTotal([priced("2.60", 1), priced("1.89", 1)])).toBe("4.49");
+    expect(cartTotal([priced("0.10", 3)])).toBe("0.30");
+  });
+
+  it("is 0.00 for an empty cart", () => {
+    expect(cartTotal([])).toBe("0.00");
+  });
+
+  it("reports a price it cannot read as unusable, not as zero", () => {
+    // The caller compares this against the spending ceiling. A broken catalog price
+    // must not read as a free order — "NaN" fails withinAutonomousLimit, which sends
+    // the checkout to a human.
+    expect(cartTotal([priced("2.60", 1), priced("free", 1)])).toBe("NaN");
   });
 });

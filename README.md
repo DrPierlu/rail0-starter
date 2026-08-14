@@ -35,12 +35,18 @@ is gated on a per-checkout nonce minted when the checkout begins — order ids a
 not secret, so without it a guessed id could overwrite a buyer's stashed
 signatures and kill the checkout.
 
-For a demo on a machine with no extension, set `BUYER_PRIVATE_KEY` in
-`.env.local`: the key stays on the server, the browser asks `/api/buyer/signer`
-for a signature and never receives the key itself, and the route refuses to
-exist outside `next dev` — so a deployed instance always uses MetaMask. The
-seller key is server-side by design: that is the merchant's own backend signing
-its own transactions.
+**Or the agent buys on its own.** Set `BUYER_PRIVATE_KEY` and the deployment has
+its own wallet: `checkout_begin` runs the whole checkout — sign-in, payment
+authorization, escrow — with no browser and no human, and answers `step: "done"`.
+The key never leaves the server, and no endpoint signs anything with it beyond
+the checkout itself. `BUYER_MAX_ORDER` (default 25) is the ceiling for that:
+above it the agent asks a person to approve, then still buys by itself. Before
+turning this on anywhere public, close the agent's channel
+(`agent/channels/eve.ts` ships anonymous) — otherwise anyone with the URL directs
+the spending.
+
+The seller key is server-side by design: that is the merchant's own backend
+signing its own transactions.
 
 ## The flow
 

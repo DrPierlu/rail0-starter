@@ -1,32 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { buyerSignerEnabled } from "@/lib/buyer-signer";
+import { agentWalletConfigured, withinAutonomousLimit } from "@/lib/buyer-signer";
 
-describe("buyerSignerEnabled", () => {
-  const key = `0x${"a".repeat(64)}`;
+// The signature packing itself is packSignature (lib/rail0), covered by
+// test/rail0.test.ts — signAsAgent calls it rather than carrying its own copy.
 
-  it("is on only in development, with a key", () => {
-    expect(buyerSignerEnabled({ nodeEnv: "development", key })).toBe(true);
-  });
-
-  it("is off in production even with a key configured", () => {
-    // The failure this pins is the serious one: a hosted instance that signs
-    // arbitrary payloads with somebody's key for whoever can reach the route.
-    expect(buyerSignerEnabled({ nodeEnv: "production", key })).toBe(false);
-  });
-
-  it("is off for any environment that is not development", () => {
-    // Vercel previews build with NODE_ENV=production, but the gate is an allow-list
-    // of one rather than a deny-list, so an environment nobody anticipated is off.
-    for (const nodeEnv of ["test", "staging", "preview", undefined]) {
-      expect(buyerSignerEnabled({ nodeEnv, key })).toBe(false);
-    }
-  });
-
-  it("is off in development when no key is configured", () => {
-    expect(buyerSignerEnabled({ nodeEnv: "development", key: undefined })).toBe(false);
-    expect(buyerSignerEnabled({ nodeEnv: "development", key: "" })).toBe(false);
+describe("agentWalletConfigured", () => {
+  it("is the presence of a key, and nothing else", () => {
+    expect(agentWalletConfigured(`0x${"a".repeat(64)}`)).toBe(true);
+    expect(agentWalletConfigured(undefined)).toBe(false);
+    expect(agentWalletConfigured("")).toBe(false);
   });
 });
 
-// The signature packing itself is packSignature (lib/rail0), covered by
-// test/rail0.test.ts — signAsBuyer calls it rather than carrying its own copy.
+describe("withinAutonomousLimit", () => {
+  it("allows a total at or under the ceiling", () => {
+    expect(withinAutonomousLimit("9.90", 25)).toBe(true);
+    expect(withinAutonomousLimit("25.00", 25)).toBe(true);
+  });
+
+  it("sends a total over the ceiling to a human", () => {
+    expect(withinAutonomousLimit("25.01", 25)).toBe(false);
+    expect(withinAutonomousLimit("1000", 25)).toBe(false);
+  });
+
+  it("treats a ceiling of 0 as no ceiling", () => {
+    expect(withinAutonomousLimit("100000", 0)).toBe(true);
+  });
+
+  it("escalates a total it cannot read, rather than passing it", () => {
+    // The dangerous default: Number("") is 0 and Number("abc") is NaN, and a naive
+    // `<= limit` lets the first through as free and — with NaN — silently compares
+    // false either way. An amount nobody can read is exactly what a person should see.
+    for (const bad of ["", "abc", "NaN", "1,00"]) {
+      expect(withinAutonomousLimit(bad, 25)).toBe(false);
+    }
+  });
+
+  it("compares numerically, so trailing zeros do not matter", () => {
+    expect(withinAutonomousLimit("9.9", 9.9)).toBe(true);
+    expect(withinAutonomousLimit("9.90", 9.9)).toBe(true);
+  });
+});
