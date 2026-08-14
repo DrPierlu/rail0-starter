@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { pollWhileVisible } from "@/lib/poll";
 import type { Order } from "@/lib/store";
 import { CopyableId, StateBadge } from "../ui";
 
@@ -94,46 +95,9 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
     void submitToken(devToken);
   });
 
-  // Poll while the tab is VISIBLE, and not at all while it is not.
-  //
-  // Each tick re-reads every order from the gateway and writes the store back, so an
-  // idle background tab was doing that around the clock — on a metered store (Upstash's
-  // free tier is 500K commands a month) one forgotten tab is most of the budget, for a
-  // dashboard nobody is looking at. document.hidden covers the cases that matter here:
-  // another tab in front, the window minimised, the laptop closed.
-  //
-  // The refresh on becoming visible again is the point of the pattern, not a detail:
-  // without it the operator returns to whatever the screen held when they left, which
-  // on a payments dashboard is worse than a slow refresh — it looks current and is not.
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-
-    const stop = () => {
-      if (interval !== undefined) clearInterval(interval);
-      interval = undefined;
-    };
-
-    const start = () => {
-      if (interval !== undefined) return;
-      interval = setInterval(refresh, POLL_MS);
-    };
-
-    const sync = () => {
-      if (document.hidden) {
-        stop();
-        return;
-      }
-      refresh();
-      start();
-    };
-
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => {
-      document.removeEventListener("visibilitychange", sync);
-      stop();
-    };
-  }, [refresh]);
+  // Only while the tab is visible — see pollWhileVisible for why, and for the immediate
+  // refresh on return.
+  useEffect(() => pollWhileVisible(() => void refresh(), POLL_MS), [refresh]);
 
   const act = async (orderId: string, action: "capture" | "void") => {
     setActing(orderId);

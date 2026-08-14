@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TERMINAL_STATES } from "@/lib/order-ui";
+import { pollWhileVisible } from "@/lib/poll";
 import type { Order } from "@/lib/store";
 import { CopyableId, StateBadge } from "../ui";
+
+/** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
+const POLL_MS = 3000;
 
 /**
  * An order card in the chat.
@@ -62,11 +66,12 @@ export function OrderCard({
         // transient — next tick retries
       }
     };
-    poll();
-    const interval = setInterval(poll, 3000);
+    // Visibility-gated: a buyer tab left open after a purchase would otherwise poll
+    // this order forever, and the answer stops changing once it settles anyway.
+    const stop = pollWhileVisible(() => void poll(), POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
   }, [orderId, state, gone, live]);
 

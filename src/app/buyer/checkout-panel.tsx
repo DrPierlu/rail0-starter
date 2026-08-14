@@ -9,10 +9,14 @@ import {
   stepIndex,
 } from "@/lib/checkout-step";
 import { TERMINAL_STATES } from "@/lib/order-ui";
+import { pollWhileVisible } from "@/lib/poll";
 import type { Order } from "@/lib/store";
 import { OrderCard } from "./order-card";
 import { SigningCard, type SigningOutput } from "./signing-card";
 import { useWallet } from "./wallet";
+
+/** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
+const POLL_MS = 3000;
 
 /**
  * The checkout, docked above the composer — the ONE place anything is actionable or
@@ -72,11 +76,10 @@ export function CheckoutPanel({
         // transient — the next tick retries
       }
     };
-    poll();
-    const interval = setInterval(poll, 3000);
+    const stop = pollWhileVisible(() => void poll(), POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
   }, [orderId, state]);
 
