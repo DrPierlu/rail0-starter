@@ -38,7 +38,7 @@ export interface DocStore<T> {
    *
    * That is not hypothetical here — `GET /api/shop/orders` refreshes every order
    * with `Promise.allSettled(stored.map(refreshOrder))`, so N of these overlap on
-   * every poll, and the merchant dashboard polls every 4s while each buyer card
+   * every poll, and the merchant dashboard polls every 5s (only while visible) while each buyer card
    * polls every 3s. The casualty was the checkout write-ahead: a refresh that read
    * before it and wrote after it dropped the order's `rail0_id` and `authorizing`
    * state, and nothing could heal that — the refresh path returns early without a

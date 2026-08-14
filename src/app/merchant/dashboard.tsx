@@ -5,6 +5,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Order } from "@/lib/store";
 import { CopyableId, StateBadge } from "../ui";
 
+/**
+ * How often the order list re-reads, while the tab is visible.
+ *
+ * A tick is not cheap: it refreshes EVERY order against the gateway and rewrites the
+ * store document, so this number is the dashboard's whole running cost. Five seconds
+ * is well inside what a payment takes to confirm on any chain here — the slowest is
+ * Arbitrum Sepolia at ~11 minutes of finality — so nothing is observed later for it.
+ */
+const POLL_MS = 5000;
+
 export function MerchantDashboard({ devToken }: { devToken?: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [acting, setActing] = useState<string | null>(null);
@@ -20,7 +30,7 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
   // the two conditions that have to hold before the server hands it over at all.
   const [token, setToken] = useState(devToken ?? "");
   // The automatic sign-in fires at most once. Without this, a devToken the gateway
-  // rejects would retry on every 4s poll that re-set `signedOut`.
+  // rejects would retry on every poll that re-set `signedOut`.
   const autoSignedIn = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -32,7 +42,7 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
         setSignedOut(false);
         setError(null);
       } else if (res.status === 401) {
-        // Deliberately leaves `error` alone: this poll runs every 4s, and clearing
+        // Deliberately leaves `error` alone: this poll repeats, and clearing
         // it here wiped the "invalid merchant token" the sign-in had just set,
         // before it could be read. A stale message clears on the next success.
         setSignedOut(true);
@@ -84,10 +94,45 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
     void submitToken(devToken);
   });
 
+  // Poll while the tab is VISIBLE, and not at all while it is not.
+  //
+  // Each tick re-reads every order from the gateway and writes the store back, so an
+  // idle background tab was doing that around the clock — on a metered store (Upstash's
+  // free tier is 500K commands a month) one forgotten tab is most of the budget, for a
+  // dashboard nobody is looking at. document.hidden covers the cases that matter here:
+  // another tab in front, the window minimised, the laptop closed.
+  //
+  // The refresh on becoming visible again is the point of the pattern, not a detail:
+  // without it the operator returns to whatever the screen held when they left, which
+  // on a payments dashboard is worse than a slow refresh — it looks current and is not.
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 4000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const stop = () => {
+      if (interval !== undefined) clearInterval(interval);
+      interval = undefined;
+    };
+
+    const start = () => {
+      if (interval !== undefined) return;
+      interval = setInterval(refresh, POLL_MS);
+    };
+
+    const sync = () => {
+      if (document.hidden) {
+        stop();
+        return;
+      }
+      refresh();
+      start();
+    };
+
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      stop();
+    };
   }, [refresh]);
 
   const act = async (orderId: string, action: "capture" | "void") => {
@@ -104,7 +149,7 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
         // Set the message and DON'T refresh. refresh()'s success branch calls
         // setError(null), so refreshing after a failed action wiped the very message
         // that explains why it failed — a 409 or 422 from capture/void was gone
-        // within a render. The list is a second behind until the 4s poll catches up,
+        // within a render. The list is a moment behind until the next poll catches up,
         // which is the right trade for a merchant who needs to read why the action
         // they just took on real escrowed funds did not happen.
         setError(body.error ?? `${action} failed`);
