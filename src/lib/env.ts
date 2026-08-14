@@ -11,12 +11,21 @@ export class ConfigError extends Error {}
 
 const schema = z.object({
   GATEWAY_URL: z.string().url().default("http://localhost:9292"),
-  // No BUYER_PRIVATE_KEY on this branch, by design: the buyer signs in the
-  // browser (MetaMask or a pasted key that never leaves it). Only the SELLER
-  // key lives server-side — the merchant's own backend signing its own txs.
   SELLER_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/, {
     message: "SELLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex key",
   }),
+  // Optional, and a LOCAL DEVELOPMENT CONVENIENCE ONLY — lib/buyer-signer.ts
+  // refuses to use it outside `next dev`. A real buyer signs in their own
+  // browser wallet; this exists so a demo on your own machine does not need
+  // MetaMask, and it replaced a UI that asked the buyer to paste a private key
+  // into a form. Optional HERE and gated where it is read, like MERCHANT_TOKEN:
+  // the app must run fine without it (the buyer connects MetaMask instead).
+  BUYER_PRIVATE_KEY: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/, {
+      message: "BUYER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex key",
+    })
+    .optional(),
   SIWE_CHAIN_ID: z.coerce.number().int().default(1),
   AI_MODEL: z.string().default("claude-sonnet-5"),
   // Optional HERE and required by the gate that reads it (lib/merchant-auth.ts):
@@ -37,6 +46,7 @@ export function env(): Env {
     const parsed = schema.safeParse({
       GATEWAY_URL: process.env.GATEWAY_URL || undefined,
       SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
+      BUYER_PRIVATE_KEY: process.env.BUYER_PRIVATE_KEY || undefined,
       SIWE_CHAIN_ID: process.env.SIWE_CHAIN_ID || undefined,
       AI_MODEL: process.env.AI_MODEL || undefined,
       MERCHANT_TOKEN: process.env.MERCHANT_TOKEN || undefined,

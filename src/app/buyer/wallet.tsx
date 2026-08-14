@@ -1,20 +1,20 @@
 "use client";
 
 import { keccak_256 } from "@noble/hashes/sha3.js";
-import {
-  checksumAddress,
-  type Eip3009Signature,
-  type PaymentDetail,
-  personalSign,
-  type SigningPayload,
-  signPayment,
-} from "@rail0/sdk";
+import type { SigningPayload } from "@rail0/sdk";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-// The buyer's wallet, browser-side only. Two backends, mirroring rail0-admin:
-// MetaMask (the key stays in the extension) or a pasted private key (kept in
-// React state for the tab's lifetime — never persisted, never sent anywhere;
-// only the SIGNATURES it produces leave the browser).
+// The buyer's wallet. Two backends, and NEITHER holds a private key in this tab:
+//
+//   metamask   — the key stays in the extension; the browser asks it to sign.
+//   configured — a BUYER_PRIVATE_KEY set in .env.local for local development. The
+//                key stays on the server (lib/buyer-signer); this asks
+//                /api/buyer/signer for a signature the same way it asks MetaMask.
+//
+// A key is never pasted into the page. The form that used to accept one is gone: a
+// private key typed into a web form is the one credential this app should never
+// handle, and the configured backend covers the case it existed for (a demo on your
+// own machine, with no extension installed).
 
 interface EthereumProvider {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
@@ -30,7 +30,7 @@ declare global {
 }
 
 export interface Wallet {
-  kind: "metamask" | "privateKey";
+  kind: "metamask" | "configured";
   /** EIP-55 checksummed — the gateway's SIWE parser rejects lowercase. */
   address: string;
   signMessage(message: string): Promise<string>;
@@ -43,11 +43,36 @@ interface WalletContextValue {
   connectMetaMask(): Promise<void>;
   /** Re-open MetaMask's account picker to hand over to a different account. */
   switchMetaMask(): Promise<void>;
-  connectPrivateKey(key: string): void;
   disconnect(): Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
+
+/**
+ * Ask the server to sign with the configured buyer key, and return the signature.
+ *
+ * The key is never fetched — only the signature comes back, so a devtools console or a
+ * page-level extension has nothing to read here. A failure is surfaced with the
+ * server's own message: this path only exists in local development, and "the signer
+ * said no" is exactly what the developer needs to see.
+ */
+async function signViaServer(
+  request: { kind: "message"; message: string } | { kind: "typed_data"; payload: SigningPayload },
+): Promise<string> {
+  const response = await fetch("/api/buyer/signer", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    signature?: string;
+    error?: string;
+  };
+  if (!response.ok || !body.signature) {
+    throw new Error(body.error ?? "the configured signer refused the request");
+  }
+  return body.signature;
+}
 
 export function useWallet(): WalletContextValue {
   const ctx = useContext(WalletContext);
@@ -96,11 +121,6 @@ export function toChecksumAddress(address: string): string {
     out += Number.parseInt(hashHex[i], 16) >= 8 ? addr[i].toUpperCase() : addr[i];
   }
   return out;
-}
-
-/** Pack { v, r, s } into the 65-byte r||s||v hex the gateway expects. */
-function pack(sig: Eip3009Signature): string {
-  return `${sig.r}${sig.s.slice(2)}${sig.v.toString(16).padStart(2, "0")}`;
 }
 
 /**
@@ -154,6 +174,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // render now agree on false, and the effect flips it.
   const [hasMetaMask, setHasMetaMask] = useState(false);
   useEffect(() => setHasMetaMask(!!window.ethereum), []);
+  // Set by an explicit disconnect, and read by the auto-connect below so it cannot
+  // immediately re-attach the configured wallet the user just dropped — which would
+  // read as a disconnect button that does nothing. Mount-scoped on purpose: a reload
+  // is a fresh start, and the configured signer is the machine's own setting.
+  const [dropped, setDropped] = useState(false);
 
   // One place that turns an address into a MetaMask-backed Wallet — used by the
   // initial connect, by the account switch, and by the accountsChanged handler, so
@@ -209,21 +234,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setWallet(metaMaskWallet(accounts[0]));
   }, [metaMaskWallet]);
 
-  const connectPrivateKey = useCallback((key: string) => {
-    const trimmed = key.trim();
-    if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
-      throw new Error("the key must be a 0x-prefixed 32-byte hex string");
-    }
-    setWallet({
-      kind: "privateKey",
-      address: checksumAddress(trimmed),
-      signMessage: async (message) => personalSign(trimmed, message),
-      // signPayment only reads `signing_payload`, so a minimal object is enough
-      // (the same trick rail0-admin uses for signRefund).
-      signTypedData: async (payload) =>
-        pack(signPayment(trimmed as `0x${string}`, { signing_payload: payload } as PaymentDetail)),
-    });
-  }, []);
+  // A wallet backed by the key configured on the server (local development only).
+  // Shaped exactly like the MetaMask one so every caller — the signing card, the
+  // checkout panel, the client context on each turn — stays backend-agnostic; the
+  // only difference is who is asked for the signature.
+  const configuredWallet = useCallback(
+    (address: string): Wallet => ({
+      kind: "configured",
+      address: toChecksumAddress(address),
+      signMessage: (message) => signViaServer({ kind: "message", message }),
+      signTypedData: (payload) => signViaServer({ kind: "typed_data", payload }),
+    }),
+    [],
+  );
 
   // Forgetting the wallet locally is not disconnecting: MetaMask keeps the account
   // permitted, so the next connect resolves silently with it and there is no way to
@@ -232,9 +255,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   //
   // Best-effort: a provider that does not implement wallet_revokePermissions throws,
   // and the local state must still be cleared — refusing to disconnect because the
-  // wallet would not cooperate is the wrong failure. The pasted-key case has nothing
-  // to revoke.
+  // wallet would not cooperate is the wrong failure. The configured case has nothing
+  // to revoke: it is this machine's own .env.local, not a granted permission.
   const disconnect = useCallback(async () => {
+    setDropped(true);
     const ethereum = window.ethereum;
     if (wallet?.kind === "metamask" && ethereum) {
       try {
@@ -259,9 +283,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   //
   // eth_accounts, NOT eth_requestAccounts: it never prompts. It answers with the
   // account the site is already permitted to see, or [] when it has none — so MetaMask
-  // is the source of truth and nothing has to be stored here. That matters, because the
-  // other backend is a pasted private key, and putting THAT anywhere persistent is the
-  // one thing this component must never do; it stays tab-lifetime only, by design.
+  // is the source of truth and nothing has to be stored here.
   //
   // An explicit disconnect revokes the permission, so this cannot resurrect a wallet
   // the user deliberately dropped: eth_accounts then returns [].
@@ -272,8 +294,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         const accounts = (await ethereum.request({ method: "eth_accounts" })) as string[];
-        // Never clobber a wallet connected in the meantime — in particular a pasted
-        // key, which this must not silently replace with a MetaMask account.
+        // Never clobber a wallet connected in the meantime.
         if (!cancelled && accounts?.[0]) {
           setWallet((current) => current ?? metaMaskWallet(accounts[0]));
         }
@@ -286,13 +307,43 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
   }, [metaMaskWallet]);
 
+  // Attach the configured signer, when this machine has one.
+  //
+  // Runs before the buyer is asked for anything: with BUYER_PRIVATE_KEY set, the chat
+  // opens already connected and checkout never has to stop and ask. Without it the
+  // route 404s and nothing happens here — the buyer connects MetaMask instead, which
+  // is the only path a deployed instance has.
+  //
+  // MetaMask wins if it got there first (`current ?? …`): an extension the person
+  // actually chose outranks a convenience default, and this must not silently move
+  // the checkout to a different address mid-conversation.
+  useEffect(() => {
+    if (dropped) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/buyer/signer");
+        if (!response.ok) return;
+        const { address } = (await response.json()) as { address?: string };
+        if (!cancelled && address) {
+          setWallet((current) => current ?? configuredWallet(address));
+        }
+      } catch {
+        // No signer route, or the app is not running one: stay disconnected.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [configuredWallet, dropped]);
+
   // Follow the wallet when the user switches account (or disconnects the site) from
   // inside MetaMask, instead of holding an address the extension no longer controls —
   // which would only surface as a confusing signature failure at checkout. An empty
   // array is MetaMask saying the site is no longer permitted.
   //
-  // Only while a MetaMask wallet is connected: a pasted key is unrelated to the
-  // extension and must not be cleared by its events.
+  // Only while a MetaMask wallet is connected: the configured signer is unrelated to
+  // the extension and must not be cleared by its events.
   useEffect(() => {
     const ethereum = window.ethereum;
     if (!ethereum?.on || wallet?.kind !== "metamask") return;
@@ -309,14 +360,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [wallet?.kind, metaMaskWallet]);
 
   const value = useMemo(
-    () => ({ wallet, hasMetaMask, connectMetaMask, switchMetaMask, connectPrivateKey, disconnect }),
-    [wallet, hasMetaMask, connectMetaMask, switchMetaMask, connectPrivateKey, disconnect],
+    () => ({ wallet, hasMetaMask, connectMetaMask, switchMetaMask, disconnect }),
+    [wallet, hasMetaMask, connectMetaMask, switchMetaMask, disconnect],
   );
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
 /**
- * The connect controls — MetaMask, or paste a key.
+ * The connect control — MetaMask.
  *
  * Its own component so it can be rendered WHERE THE WALLET IS NEEDED. It used to live
  * only in the page header, and the signing card could do no better than tell you to
@@ -327,76 +378,36 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
  * point it is blocking on.
  */
 export function WalletConnect({ className = "" }: { className?: string }) {
-  const { hasMetaMask, connectMetaMask, connectPrivateKey } = useWallet();
-  const [pasting, setPasting] = useState(false);
-  const [key, setKey] = useState("");
+  const { hasMetaMask, connectMetaMask } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   return (
     <div className={`flex flex-wrap items-center gap-2 text-xs ${className}`}>
-      {pasting ? (
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            try {
-              connectPrivateKey(key);
-              setKey("");
-              setPasting(false);
-              setError(null);
-            } catch (err) {
-              setError(walletErrorMessage(err));
-            }
+      {hasMetaMask ? (
+        <button
+          type="button"
+          onClick={() => {
+            setBusy(true);
+            setError(null);
+            connectMetaMask()
+              .catch((e: unknown) => setError(walletErrorMessage(e)))
+              .finally(() => setBusy(false));
           }}
+          disabled={busy}
+          className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-black"
         >
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="0x… private key (stays in this tab)"
-            className="w-64 rounded-lg border border-neutral-300 bg-transparent px-2 py-1 font-mono outline-none focus:border-neutral-500 dark:border-neutral-700"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white dark:bg-neutral-100 dark:text-black"
-          >
-            Use key
-          </button>
-          <button
-            type="button"
-            onClick={() => setPasting(false)}
-            className="text-neutral-400 hover:underline"
-          >
-            cancel
-          </button>
-        </form>
+          {busy ? "Waiting for MetaMask…" : "Connect MetaMask"}
+        </button>
       ) : (
-        <>
-          {hasMetaMask && (
-            <button
-              type="button"
-              onClick={() => {
-                setBusy(true);
-                setError(null);
-                connectMetaMask()
-                  .catch((e: unknown) => setError(walletErrorMessage(e)))
-                  .finally(() => setBusy(false));
-              }}
-              disabled={busy}
-              className="rounded-lg bg-neutral-900 px-2.5 py-1 font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-black"
-            >
-              {busy ? "Waiting for MetaMask…" : "Connect MetaMask"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setPasting(true)}
-            className="rounded-lg border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Paste a key
-          </button>
-        </>
+        // No extension AND no configured signer (that one attaches on its own, so
+        // reaching here means there is none). Say what to do rather than render an
+        // empty row — the alternative used to be "paste a key", which is exactly the
+        // affordance this app no longer offers.
+        <span className="text-neutral-500">
+          No wallet detected. Install MetaMask to pay, or set BUYER_PRIVATE_KEY in .env.local to run
+          this demo without one.
+        </span>
       )}
       {error && <span className="text-red-500">{error}</span>}
     </div>
@@ -434,7 +445,9 @@ export function WalletChip() {
         <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-emerald-700 dark:text-emerald-400">
           {wallet.address.slice(0, 6)}…{wallet.address.slice(-4)}
         </span>
-        <span className="text-neutral-400">{wallet.kind === "metamask" ? "MetaMask" : "key"}</span>
+        <span className="text-neutral-400">
+          {wallet.kind === "metamask" ? "MetaMask" : "configured key"}
+        </span>
         {wallet.kind === "metamask" && (
           <button
             type="button"

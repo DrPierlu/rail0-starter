@@ -4,13 +4,14 @@ import { clearSigning, getSigning, putSigning } from "./checkout-signing";
 import { env } from "./env";
 import type { Order } from "./store";
 
-// Buyer-side payment flow — KEYLESS on this branch: the server never holds the
-// buyer's private key. Every buyer signature (the SIWE login and the EIP-3009
-// payment authorization) is produced in the browser — MetaMask or a pasted key
-// that stays client-side — and handed to the storefront out-of-band (the
-// signature stash in the store), never through the model's context where a
-// mangled hex digit would burn the payment. The checkout is therefore three
+// Buyer-side payment flow. Every buyer signature (the SIWE login and the EIP-3009
+// payment authorization) is produced at the browser's request — by MetaMask, or by
+// the locally configured key in lib/buyer-signer — and handed to the storefront
+// out-of-band (the signature stash in the store), never through the model's context
+// where a mangled hex digit would burn the payment. The checkout is therefore three
 // tool steps, each pausing for the browser to sign.
+//
+// Nothing here ever sees a buyer key: this module composes signatures it is given.
 
 // The statement POST /auth requires, verbatim. The gateway asserts it exactly
 // (gateway#147), which is what stops a login proof from being replayed to register

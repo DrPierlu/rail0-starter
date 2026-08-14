@@ -158,7 +158,7 @@ export function SigningCard({
               ? "Waiting for the wallet…"
               : wallet.kind === "metamask"
                 ? "Sign with MetaMask"
-                : "Sign with the pasted key"}
+                : "Sign with the configured key"}
           </button>
         ) : (
           // The connect controls are HERE, not in a strip at the top of the page: this
