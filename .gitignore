@@ -18,3 +18,8 @@ next-env.d.ts
 .DS_Store
 *.tsbuildinfo
 .eve/
+
+# Added by `vercel link`. The .env* rule it also appends is dropped on purpose:
+# the env files are already covered above, and .env* would sweep in .env.example,
+# which is tracked deliberately as the documented template.
+.vercel
