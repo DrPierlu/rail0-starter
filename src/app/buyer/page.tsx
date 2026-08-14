@@ -10,7 +10,7 @@ import { asCheckoutOutput, checkoutKey } from "./checkout-card";
 import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
 import { orderCardOrderId } from "./tool-views";
-import { useWallet, WalletChip, WalletProvider } from "./wallet";
+import { WalletChip, WalletProvider } from "./wallet";
 
 // Where the conversation is parked while this page is unmounted (a hop to
 // /merchant and back, a reload). The eve session itself is durable on the
@@ -173,7 +173,6 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   // client-only: BuyerPage renders an empty shell until `mounted`, so EveChat never
   // renders on the server and there is no markup for the client to disagree with.
   const [suggestions] = useState(() => pickSuggestions(4));
-  const { wallet } = useWallet();
   // Checkouts finished in this tab. The docked box needs it to know when to let go, and
   // the transcript stub needs it to read as done rather than as still waiting.
   const [doneKeys, setDoneKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
@@ -232,13 +231,14 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
     pinnedRef.current = true;
   };
 
-  // Every turn carries the connected wallet address as ephemeral client
-  // context: checkout_begin needs it, and the model must never guess it.
+  // No client context. The wallet address used to ride every turn because checkout_begin
+  // took one — and a model that did not copy it into the tool input produced "no wallet
+  // connected" for a shopper whose wallet was connected and on screen. The card reads the
+  // wallet directly now (it is the only thing that signs), so the agent needs neither the
+  // address nor a way to be wrong about it.
   const sendText = (text: string) => {
     followStream();
-    void agent.send(text, {
-      clientContext: wallet ? { buyer_wallet_address: wallet.address } : undefined,
-    });
+    void agent.send(text);
   };
 
   const submit = (text: string) => {

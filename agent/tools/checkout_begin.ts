@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { budgetPolicy, spentInWindow, withinBudget } from "../../src/lib/agent-budget";
-import { checkoutAsAgent, getShop, siweChallenge } from "../../src/lib/buyer";
+import { checkoutAsAgent, getShop } from "../../src/lib/buyer";
 import { agentWalletAddress } from "../../src/lib/buyer-signer";
 import { shopBase } from "../lib/base";
 import { cartTotal, getCart } from "../lib/cart";
@@ -81,25 +81,19 @@ export default defineTool({
   },
   description:
     "Check out the current cart. With an agent wallet configured this runs the whole " +
-    "checkout and returns the finished order. Otherwise it quotes the cart and returns " +
-    "the sign-in challenge: STOP and wait — the shopper signs, pays and submits in the " +
-    "card shown in chat, then tells you the order id.",
+    "checkout and returns the finished order. Otherwise it quotes the cart and puts a " +
+    "checkout card in the chat: STOP and wait — the shopper connects a wallet if needed, " +
+    "signs, pays there, and then tells you the order id.",
+  // No buyer address. The card reads the connected wallet itself, and the checkout is
+  // driven from there — asking the model to relay an address it was handed as context is
+  // what produced "no wallet connected" for shoppers whose wallet was connected.
   inputSchema: z.object({
     chain_id: z.number().int().describe("Chosen chain id, from payment_options."),
     token_address: z
       .string()
       .describe("Chosen stablecoin's contract address, from payment_options."),
-    // Optional because the agent's own wallet needs no address from anywhere: it buys as
-    // itself. Required in practice for a human buyer, and refused below when missing —
-    // in the schema it would make the autonomous path demand an address that does not
-    // exist.
-    buyer_address: z
-      .string()
-      .regex(/^0x[0-9a-fA-F]{40}$/)
-      .optional()
-      .describe("The connected wallet address, exactly as given in the client context."),
   }),
-  async execute({ chain_id, token_address, buyer_address }) {
+  async execute({ chain_id, token_address }) {
     const cart = await getCart();
     if (cart.length === 0) return { error: "cart is empty" };
     const items = cart.map((l) => ({ product_id: l.product_id, qty: l.qty }));
@@ -119,13 +113,9 @@ export default defineTool({
       };
     }
 
-    if (!buyer_address) {
-      return { error: "no wallet connected — ask the shopper to connect one, then retry" };
-    }
-
-    // The whole of the human checkout, handed to the card in one go: what it costs, what
-    // it is for, and the exact text to sign. The card does the rest — create, sign, submit
-    // — because it is the only party that ever holds the signatures. Nothing is created
+    // The human checkout, handed to the card in one go: what it costs and what it is
+    // for. The card does the rest — challenge, sign, create, sign, submit — because it is
+    // the only party that holds the wallet and the signatures. Nothing is created
     // anywhere yet, so there is no order id to report and nothing to clean up if the
     // shopper walks away.
     const quote = await getShop(shopBase()).quote(items, chain_id, token_address);
@@ -137,7 +127,6 @@ export default defineTool({
       items,
       chain_id,
       token_address,
-      siwe_message: await siweChallenge(buyer_address),
       lines: quote.lines,
       total: quote.total,
       token: quote.token.symbol,
@@ -147,12 +136,12 @@ export default defineTool({
   // affects the model. Channel event handlers and hooks still get the full output on
   // action.result" (docs/tools/overview.mdx).
   //
-  // So the SIWE text never enters model context or the durable model history. The EIP-712
-  // payload never comes near it either — it is minted by /api/checkout/create straight
-  // into the card. Both must be signed VERBATIM, which makes routing them through a model
-  // a corruption risk on top of a disclosure one: a single altered hex digit burns the
-  // payment. The docs name the case: "Do not return secrets, credentials, unnecessary
-  // personal data, or unbounded sensitive content from tools."
+  // Nothing signable passes through the model at all now: the SIWE text is fetched by the
+  // card (/api/checkout/challenge) and the EIP-712 payload is minted by
+  // /api/checkout/create straight into it. Both must be signed VERBATIM, which makes
+  // routing them through a model a corruption risk on top of a disclosure one — a single
+  // altered hex digit burns the payment. The docs name the case: "Do not return secrets,
+  // credentials, unnecessary personal data, or unbounded sensitive content from tools."
   toModelOutput(output) {
     if ("error" in output) return { type: "json", value: { error: output.error } };
     // The autonomous run is already finished, so telling the model to wait for a card

@@ -34,8 +34,6 @@ export interface CheckoutOutput {
   items: { product_id: string; qty: number }[];
   chain_id: number;
   token_address: string;
-  /** The exact EIP-4361 text to personal_sign, built server-side with a live nonce. */
-  siwe_message: string;
   lines: CartLine[];
   total: string;
   /** The stablecoin's symbol, for display. */
@@ -45,7 +43,7 @@ export interface CheckoutOutput {
 /** Narrow an arbitrary tool output to a checkout, or null. */
 export function asCheckoutOutput(output: unknown): CheckoutOutput | null {
   const value = output as CheckoutOutput | undefined;
-  return value?.step === "checkout" && typeof value.siwe_message === "string" ? value : null;
+  return value?.step === "checkout" && typeof value.checkout_id === "string" ? value : null;
 }
 
 /**
@@ -96,7 +94,15 @@ export function CheckoutCard({
     if (!wallet) return;
     setError(null);
     try {
-      const signature = await wallet.signMessage(output.siwe_message);
+      // The challenge is fetched HERE, per attempt, from the wallet connected right now.
+      // Not handed down by the agent: the address is a fact of this browser, and a model
+      // asked to relay it can simply not do so — which read as "no wallet connected" for
+      // a shopper looking at their connected wallet. Per attempt, because a SIWE nonce is
+      // single-use and a card left open would otherwise sign a spent one.
+      const { siwe_message } = await post<{ siwe_message: string }>("/api/checkout/challenge", {
+        address: wallet.address,
+      });
+      const signature = await wallet.signMessage(siwe_message);
       advance("creating");
       const created = await post<{ rail0_id: string; signing_payload: SigningPayload }>(
         "/api/checkout/create",
@@ -104,7 +110,7 @@ export function CheckoutCard({
           items: output.items,
           chain_id: output.chain_id,
           token_address: output.token_address,
-          siwe_message: output.siwe_message,
+          siwe_message,
           siwe_signature: signature,
         },
       );
@@ -178,11 +184,9 @@ export function CheckoutCard({
         {output.lines.map((line) => `${line.qty} × ${line.name}`).join(" · ")}
       </p>
 
-      {stage === "sign_login" && (
-        <pre className="mt-2 max-h-32 overflow-auto rounded-lg bg-neutral-50 px-3 py-2 text-[10px] leading-relaxed text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-          {output.siwe_message}
-        </pre>
-      )}
+      {/* No preview of the SIWE text: it is fetched at the moment you press the button,
+          so there is nothing to show before then — and the wallet displays the exact
+          bytes it is about to sign, which is the copy that matters. */}
       {payment && stage !== "sign_login" && (
         <p className="mt-2 font-mono text-[11px] text-neutral-500">
           rail0_id {payment.rail0_id.slice(0, 10)}…{payment.rail0_id.slice(-6)}
