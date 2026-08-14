@@ -145,8 +145,14 @@ export async function readOrder(rail0Id: string): Promise<Order | undefined> {
  * here comes from the payment status alone: a capture being mined reads as `in_escrow`
  * rather than `capturing` until it confirms. The detail read has the transactions and
  * is precise; a list that fetched each one would be N+1 requests per poll.
+ *
+ * `total` is the gateway's own count (from `x-total-count`), not the length of what
+ * comes back — the merchant's book is paged, and a page that returns ten says nothing
+ * about whether there are eleven. It is also why the count is taken before the filter
+ * below drops anything: what the dashboard asks is "is there more to fetch", and the
+ * answer belongs to the gateway.
  */
-export async function readOrders(limit = 50): Promise<Order[]> {
+export async function readOrders(limit = 50): Promise<{ orders: Order[]; total: number }> {
   const seller = await clientFor("seller");
   const page = await seller.payments.list({
     payee: addressFor("seller"),
@@ -163,7 +169,7 @@ export async function readOrders(limit = 50): Promise<Order[]> {
     const matches = methods.filter((m) => m.address.toLowerCase() === wanted);
     if (matches.length === 1) orders.push(orderFrom(payment as PaymentLike, matches[0]));
   }
-  return orders;
+  return { orders, total: page.meta?.total ?? orders.length };
 }
 
 /**
