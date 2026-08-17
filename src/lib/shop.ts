@@ -6,6 +6,7 @@ import {
   type OrderToken,
   orderFrom,
   type PaymentLike,
+  type PriceCheck,
   unpackLines,
 } from "./order-view";
 import { coversCatalogPrice, type QuotedOrder, QuoteError, quote } from "./quote";
@@ -154,7 +155,32 @@ export async function readOrder(rail0Id: string): Promise<Order | undefined> {
   const payment = await seller.payments.get(rail0Id).catch(() => undefined);
   if (!payment) return undefined;
   const token = await tokenFor(payment.chain_id, payment.token);
-  return token ? orderFrom(payment as PaymentLike, token) : undefined;
+  if (!token) return undefined;
+  const order = orderFrom(payment as PaymentLike, token);
+  return { ...order, price_check: priceCheckFor(order) };
+}
+
+/**
+ * The merchant's re-pricing of what an order CLAIMS to be for (#2).
+ *
+ * The lines come from the payment's metadata, written by the payer, so this is the
+ * merchant pricing a claim against its own catalog — the same computation
+ * `authorizePayment` gates on, surfaced so the dashboard can show it happening. Cheap and
+ * local: no gateway call, just the catalog and the arithmetic.
+ */
+function priceCheckFor(order: Order): PriceCheck {
+  const claimed = order.lines.map((line) => ({ product_id: line.product_id, qty: line.qty }));
+  try {
+    const priced = quote(claimed, order.token.decimals);
+    return {
+      catalog_total: priced.total,
+      covered: coversCatalogPrice(claimed, order.total_base, order.token.decimals),
+    };
+  } catch {
+    // An unknown product or an empty claim does not price — and an order the merchant
+    // cannot price is one it must not fulfil, which is why this is not "covered".
+    return { catalog_total: "—", covered: false, unpriceable: true };
+  }
 }
 
 /**
@@ -202,7 +228,8 @@ export async function readOrders(
       unresolved++;
       continue;
     }
-    orders.push(orderFrom(payment as PaymentLike, token));
+    const order = orderFrom(payment as PaymentLike, token);
+    orders.push({ ...order, price_check: priceCheckFor(order) });
   }
   return { orders, total: page.meta?.total ?? orders.length, unresolved };
 }

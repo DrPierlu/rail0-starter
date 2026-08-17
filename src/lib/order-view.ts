@@ -57,6 +57,25 @@ export interface Order {
   error?: string;
   created_at?: string;
   updated_at?: string;
+  /**
+   * The merchant's re-pricing of the lines this payment CLAIMS to pay for (#2).
+   *
+   * Present only on merchant-side reads, because only the merchant has the catalog. The
+   * lines live in the payment's metadata and are written by the PAYER, so they are a
+   * claim; `authorizePayment` prices that claim itself before escrowing anything. This
+   * carries the comparison so the UI can show the control happening instead of leaving
+   * the most important line of the demo invisible.
+   */
+  price_check?: PriceCheck;
+}
+
+export interface PriceCheck {
+  /** What the claimed lines cost at the merchant's current catalog, human decimals. */
+  catalog_total: string;
+  /** Whether the payment's amount covers it — the comparison that stops underpaying. */
+  covered: boolean;
+  /** Set when the claim does not price at all (unknown product, or no lines). */
+  unpriceable?: boolean;
 }
 
 /** The compact metadata shape: short keys, because 4096 bytes is the whole budget. */

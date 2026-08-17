@@ -279,6 +279,37 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                 {order.payment_status && <span>payment: {order.payment_status}</span>}
                 {order.error && <span className="text-red-500">{order.error}</span>}
               </div>
+              {/* The control that guards the money, shown instead of hidden (#2). The lines
+                  above ride in the payment's metadata and are written by the BUYER, so they
+                  are a claim; the merchant prices that claim against its own catalog before
+                  escrowing anything, and this is that comparison. Green is not decoration:
+                  a claim that does not cover the catalog price, or that does not price at
+                  all, is refused by authorizePayment. */}
+              {order.price_check && (
+                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="text-neutral-500">buyer&apos;s claim</span>
+                  <span className="font-semibold tabular-nums">
+                    {order.total} {order.token.symbol}
+                  </span>
+                  <span className="text-neutral-400">vs merchant catalog</span>
+                  <span className="font-semibold tabular-nums">
+                    {order.price_check.catalog_total} {order.token.symbol}
+                  </span>
+                  {order.price_check.unpriceable ? (
+                    <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-600 dark:text-red-400">
+                      cannot be priced — will not be escrowed
+                    </span>
+                  ) : order.price_check.covered ? (
+                    <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
+                      covered ✓
+                    </span>
+                  ) : (
+                    <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-600 dark:text-red-400">
+                      underpaid — will not be escrowed
+                    </span>
+                  )}
+                </p>
+              )}
               {order.state === "in_escrow" && submitted[order.id] && (
                 // One disabled control saying what is happening, rather than two greyed
                 // ones that look like a page that has stopped working. It stays until

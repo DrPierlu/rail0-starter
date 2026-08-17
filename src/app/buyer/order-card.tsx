@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { shortId, TERMINAL_STATES } from "@/lib/order-ui";
 import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
-import { CopyableId, StateBadge } from "../ui";
+import { CopyableId, EscrowTrail, StateBadge } from "../ui";
 
 /** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
 const POLL_MS = 3000;
@@ -102,6 +102,11 @@ export function OrderCard({
       <p className="mt-1 text-xs text-neutral-500">
         {order.lines.map((l) => `${l.qty} × ${l.name}`).join(" · ")}
       </p>
+      {/* The escrow made visible: which party holds the funds right now, and why a wait
+          of minutes is the chain settling rather than something being stuck. */}
+      <div className="mt-3">
+        <EscrowTrail state={order.state} amount={order.total} symbol={order.token.symbol} />
+      </div>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
         {order.token.chain_name && <span>{order.token.chain_name}</span>}
         {order.error && <span className="text-red-500">{order.error}</span>}

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { type CheckoutEvent, pendingCheckout } from "@/lib/checkout-step";
 import { pickSuggestions } from "@/lib/suggestions";
+import { BudgetChip } from "./budget-chip";
 import { asCheckoutOutput, checkoutKey } from "./checkout-card";
 import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
@@ -360,7 +361,11 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
 
   return (
     <main className="mx-auto flex h-[calc(100vh-53px)] max-w-4xl flex-col px-4">
-      <div className="flex justify-end border-b border-neutral-200 py-2 dark:border-neutral-800">
+      <div className="flex items-center justify-between gap-4 border-b border-neutral-200 py-2 dark:border-neutral-800">
+        {/* The agent's ceiling, consumed live — the demo's answer to "how does an AI pay
+            without being given a card". Left of the wallet on purpose: it is about the
+            wallet's ALLOWANCE, and it is the more interesting of the two. */}
+        <BudgetChip />
         <WalletChip />
       </div>
       <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
