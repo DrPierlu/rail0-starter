@@ -17,7 +17,9 @@ import { OrderCard } from "./order-card";
 import { useWallet } from "./wallet";
 
 /** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
-const POLL_MS = 3000;
+// Fast first, then settled — the checkout is the one screen where a second of lag is
+// the difference between "instant" and "is it stuck?" (see pollWhileVisible).
+const POLL_SCHEDULE = [500, 1000, 3000];
 
 /**
  * The checkout, docked above the composer — the ONE place anything is actionable or
@@ -84,7 +86,7 @@ export function CheckoutPanel({
         // transient — the next tick retries
       }
     };
-    const stop = pollWhileVisible(() => void poll(), POLL_MS);
+    const stop = pollWhileVisible(() => void poll(), POLL_SCHEDULE);
     return () => {
       cancelled = true;
       stop();

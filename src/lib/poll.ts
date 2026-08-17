@@ -2,10 +2,9 @@
  * The visibility-aware half of a polling loop, in one place.
  *
  * Three screens poll here — the merchant's order list and the buyer's two order views —
- * and each one costs a gateway read per order plus a store rewrite per tick. A tab left
- * open behind another one was paying that around the clock, which on a metered store
- * (Upstash's free tier is 500K commands a month) is most of the budget spent rendering
- * screens nobody is looking at.
+ * and each tick is a gateway read (the local store this used to rewrite is gone; an order
+ * is the payment now). A tab left open behind another one was paying that around the
+ * clock, against a rate-limited API, to render screens nobody is looking at.
  *
  * `tick` runs immediately when visible, then every `ms`. Hidden, the loop stops
  * entirely; on return it runs `tick` again straight away and resumes. That immediate
@@ -22,17 +21,56 @@ export interface VisibilityDocument {
   removeEventListener(type: "visibilitychange", listener: () => void): void;
 }
 
+/**
+ * How long to wait before the nth poll of a visible stretch.
+ *
+ * A number is a fixed interval. An ARRAY is a ramp: its entries are used in order and
+ * the last one repeats forever — `[500, 1000, 3000]` polls fast twice and then settles.
+ *
+ * The ramp exists for the chains that settle instantly. Arc reaches its `safe` block at
+ * the head, so an authorize is done in well under a second, and a flat 3s interval made
+ * the demo's fastest chain look like its slowest: the state was already `in_escrow` and
+ * the screen was waiting out an interval to notice. The cost is two extra reads at the
+ * start of a wait, not a higher steady rate.
+ */
+export type PollSchedule = number | readonly number[];
+
+function delayFor(schedule: PollSchedule, attempt: number): number {
+  if (typeof schedule === "number") return schedule;
+  if (schedule.length === 0) return 1000;
+  return schedule[Math.min(attempt, schedule.length - 1)] as number;
+}
+
 /** Starts the loop and returns the stop function — call it from an effect's cleanup. */
 export function pollWhileVisible(
   tick: () => void,
-  ms: number,
+  schedule: PollSchedule,
   doc: VisibilityDocument = document,
 ): () => void {
-  let interval: ReturnType<typeof setInterval> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Counts the polls of the CURRENT visible stretch, so coming back to a hidden tab
+  // starts the ramp again — which is exactly when the screen is most stale and the fast
+  // polls are most useful.
+  let attempt = 0;
 
   const stop = () => {
-    if (interval !== undefined) clearInterval(interval);
-    interval = undefined;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+
+  // setTimeout chained rather than setInterval: the delay changes between polls, and a
+  // chain also cannot overlap itself if a tick ever takes longer than its own delay.
+  const schedulePoll = () => {
+    timer = setTimeout(
+      () => {
+        timer = undefined;
+        if (doc.hidden) return;
+        attempt += 1;
+        tick();
+        schedulePoll();
+      },
+      delayFor(schedule, attempt),
+    );
   };
 
   const sync = () => {
@@ -40,11 +78,12 @@ export function pollWhileVisible(
       stop();
       return;
     }
+    attempt = 0;
     tick();
     // Guarded rather than restarted: visibilitychange can fire while already visible,
-    // and a second interval would double the rate for the rest of the page's life —
-    // the kind of leak that only shows up as a bill.
-    if (interval === undefined) interval = setInterval(tick, ms);
+    // and a second chain would double the rate for the rest of the page's life — the
+    // kind of leak that only shows up as a bill.
+    if (timer === undefined) schedulePoll();
   };
 
   sync();

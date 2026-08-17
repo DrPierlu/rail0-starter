@@ -114,3 +114,21 @@ export function EscrowTrail({
     </div>
   );
 }
+
+/**
+ * The chain an order lives on, as a chip beside its amount.
+ *
+ * It reads as decoration and is not: the chain decides which token's `decimals` the
+ * amount was computed with, and how long settlement takes — the two facts that make
+ * every other number on the card legible. It was available only as grey micro-copy in a
+ * meta row, and it is available at all on list rows only since rail0-gateway#193 put
+ * `chain_id` there.
+ */
+export function ChainChip({ name }: { name?: string }) {
+  if (!name) return null;
+  return (
+    <span className="rounded-full bg-neutral-500/10 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+      {name}
+    </span>
+  );
+}

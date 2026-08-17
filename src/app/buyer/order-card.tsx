@@ -5,10 +5,13 @@ import { useEffect, useState } from "react";
 import { shortId, TERMINAL_STATES } from "@/lib/order-ui";
 import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
-import { CopyableId, EscrowTrail, StateBadge } from "../ui";
+import { ChainChip, CopyableId, EscrowTrail, StateBadge } from "../ui";
 
 /** Buyer-side poll: the shopper is watching an escrow confirm, so it stays brisk. */
-const POLL_MS = 3000;
+// A ramp, not an interval: on a chain that settles at its head an authorize is done in
+// under a second, and a flat 3s made the fastest chain look like the slowest. Settles to
+// 3s for the long waits (see pollWhileVisible).
+const POLL_SCHEDULE = [500, 1000, 3000];
 
 /**
  * An order card in the chat.
@@ -67,7 +70,7 @@ export function OrderCard({
     };
     // Visibility-gated: a buyer tab left open after a purchase would otherwise poll
     // this order forever, and the answer stops changing once it settles anyway.
-    const stop = pollWhileVisible(() => void poll(), POLL_MS);
+    const stop = pollWhileVisible(() => void poll(), POLL_SCHEDULE);
     return () => {
       cancelled = true;
       stop();
@@ -95,8 +98,11 @@ export function OrderCard({
         {/* The id IS the rail0 payment id now: truncated here, copied in full on click. */}
         <CopyableId value={order.id} />
         <StateBadge state={order.state} />
-        <span className="ml-auto text-sm font-semibold">
-          {order.total} {order.token.symbol}
+        <span className="ml-auto flex items-center gap-2 text-sm font-semibold">
+          <ChainChip name={order.token.chain_name} />
+          <span>
+            {order.total} {order.token.symbol}
+          </span>
         </span>
       </div>
       <p className="mt-1 text-xs text-neutral-500">
@@ -108,7 +114,6 @@ export function OrderCard({
         <EscrowTrail state={order.state} amount={order.total} symbol={order.token.symbol} />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
-        {order.token.chain_name && <span>{order.token.chain_name}</span>}
         {order.error && <span className="text-red-500">{order.error}</span>}
         <Link href="/merchant" className="ml-auto text-neutral-400 hover:underline">
           view on /merchant →

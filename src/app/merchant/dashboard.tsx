@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
-import { CopyableId, StateBadge } from "../ui";
+import { ChainChip, CopyableId, StateBadge } from "../ui";
 
 /**
  * How often the order list re-reads, while the tab is visible.
@@ -267,15 +267,17 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                     raw across the row. */}
                 <CopyableId value={order.id} />
                 <StateBadge state={order.state} />
-                <span className="ml-auto text-sm font-semibold">
-                  {order.total} {order.token.symbol}
+                <span className="ml-auto flex items-center gap-2 text-sm font-semibold">
+                  <ChainChip name={order.token.chain_name} />
+                  <span>
+                    {order.total} {order.token.symbol}
+                  </span>
                 </span>
               </div>
               <p className="mt-1 text-sm text-neutral-500">
                 {order.lines.map((l) => `${l.qty} × ${l.name}`).join(" · ")}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
-                {order.token.chain_name && <span>{order.token.chain_name}</span>}
                 {order.payment_status && <span>payment: {order.payment_status}</span>}
                 {order.error && <span className="text-red-500">{order.error}</span>}
               </div>

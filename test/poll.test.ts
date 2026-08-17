@@ -94,4 +94,41 @@ describe("pollWhileVisible", () => {
     // closure — and a hidden/visible flip would then tick once per past mount.
     expect(doc.listeners).toBe(0);
   });
+
+  // The ramp is what makes an instant-finality chain look instant: the first polls come
+  // fast, then the loop settles. Without it the demo's fastest chain waited out the same
+  // interval as its slowest.
+  it("follows a ramp and then repeats its last delay", () => {
+    const tick = vi.fn();
+    const doc = fakeDoc();
+    pollWhileVisible(tick, [500, 1000, 3000], doc);
+
+    expect(tick).toHaveBeenCalledTimes(1); // immediate
+    vi.advanceTimersByTime(500);
+    expect(tick).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1000);
+    expect(tick).toHaveBeenCalledTimes(3);
+    // From here the last entry repeats.
+    vi.advanceTimersByTime(3000);
+    expect(tick).toHaveBeenCalledTimes(4);
+    vi.advanceTimersByTime(3000);
+    expect(tick).toHaveBeenCalledTimes(5);
+  });
+
+  // Coming back to a tab is when the screen is most stale, so the ramp restarts rather
+  // than resuming at the settled rate.
+  it("restarts the ramp when the tab becomes visible again", () => {
+    const tick = vi.fn();
+    const doc = fakeDoc();
+    pollWhileVisible(tick, [500, 3000], doc);
+    vi.advanceTimersByTime(4000); // through the ramp into the steady rate
+    tick.mockClear();
+
+    doc.setHidden(true);
+    doc.setHidden(false);
+
+    expect(tick).toHaveBeenCalledTimes(1); // immediate on return
+    vi.advanceTimersByTime(500);
+    expect(tick).toHaveBeenCalledTimes(2); // fast again, not 3000
+  });
 });
