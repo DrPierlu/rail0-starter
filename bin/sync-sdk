@@ -23,10 +23,21 @@ rm -f vendor/rail0-sdk-*.tgz
 tarball="vendor/rail0-sdk-$version.tgz"
 [ -f "$tarball" ] || { echo "error: expected $tarball after pack" >&2; exit 1; }
 
-# Re-add rather than `pnpm install`: the lockfile pins the tarball's integrity
-# hash, and a plain install (even with --force) trusts it and keeps serving the
-# previous contents from the store. `pnpm add` re-resolves the file: specifier,
-# so it recomputes the hash and refreshes node_modules — and it also updates
-# package.json when the packed version changed.
+# `pnpm add` re-resolves the file: specifier, so it recomputes the tarball's integrity
+# hash and updates package.json when the packed version changed. That part works.
+#
+# It does NOT reliably refresh node_modules, which is what this script exists for. The
+# comment here used to claim the opposite — and that a plain install "even with --force"
+# would keep serving the old contents. Measured on 2026-08-17, against a tarball verified
+# to contain the new types: after `pnpm add` the extracted copy in node_modules was still
+# the previous one, and `pnpm install --force` was what replaced it. Since the version
+# never changes (the SDK is unpublished and always 1.0.0), nothing in the specifier tells
+# pnpm the contents moved.
+#
+# So both run. --force is slow — it re-resolves the whole tree, ~2 minutes on a warm
+# store — and that is the price of the guarantee: a starter built against a stale SDK
+# fails in a way that looks like the STARTER is wrong, which is the worst outcome for a
+# template someone is reading to learn from.
 pnpm add "file:$tarball"
+pnpm install --force
 echo "Done — commit $tarball (and package.json / pnpm-lock.yaml if they changed)."

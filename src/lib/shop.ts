@@ -67,39 +67,62 @@ export async function listPaymentMethods(): Promise<PaymentMethod[]> {
 }
 
 /**
- * The token a payment was made in, from the merchant's accepted methods.
+ * Every token the gateway knows, by `chainId:address`.
+ *
+ * The catalog, NOT the merchant's accepted methods. `GET /tokens` returns retired
+ * tokens too, and says why: a payment references its token address forever, so a
+ * historical order has to stay resolvable long after the merchant stops offering that
+ * token. Resolving from the accepted methods instead made "the merchant disabled this
+ * token" indistinguishable from "this token does not exist" — and the order vanished.
+ *
+ * One read, shared by the single-order and the order-book paths, so neither pays per row.
+ */
+async function tokenCatalog(): Promise<Map<string, OrderToken>> {
+  const seller = await clientFor("seller");
+  const [tokens, chains] = await Promise.all([seller.tokens.list(), seller.chains.list()]);
+  const chainNames = new Map(chains.map((c) => [c.chain_id ?? 0, c.name ?? ""]));
+  const byKey = new Map<string, OrderToken>();
+  for (const token of tokens) {
+    if (token.chain_id === undefined || !token.address || !token.symbol) continue;
+    if (token.decimals === undefined) continue;
+    byKey.set(tokenKey(token.chain_id, token.address), {
+      chain_id: token.chain_id,
+      chain_name: chainNames.get(token.chain_id),
+      symbol: token.symbol,
+      address: token.address,
+      decimals: token.decimals,
+    });
+  }
+  return byKey;
+}
+
+/** The catalog key. Lowercased, because a payment stores whatever case it was given. */
+function tokenKey(chainId: number, address: string): string {
+  return `${chainId}:${address.toLowerCase()}`;
+}
+
+/**
+ * The token a payment was made in.
  *
  * A payment carries its chain and token ADDRESS but not the symbol or decimals, and
- * both are needed to show an amount — decimals to compute it at all. The accepted
- * methods are the merchant's own list, already fetched from the gateway for the
- * storefront, so this needs no new source.
+ * both are needed to show an amount — decimals to compute it at all. `(chain_id,
+ * address)` is the exact key: an address alone identifies a token only within one
+ * chain, which is why the gateway now puts `chain_id` on list rows as well as on the
+ * detail (rail0-gateway#193). Before that this had to match on the address alone and
+ * accept the result only when it was unique, so an address the merchant took on two
+ * chains resolved to nothing.
  *
- * A payment in a token the merchant no longer accepts still has to render: falling back
- * to 6 decimals would print a wrong number, so the token is returned undefined and the
- * caller decides. Every stablecoin here is 6, which is exactly why a silent default
- * would go unnoticed until the one that is not.
+ * Undefined only when the CATALOG has no such token, which is a configuration fault
+ * rather than a normal state. Falling back to 6 decimals would print a wrong number:
+ * every stablecoin here is 6, which is exactly why a silent default would go unnoticed
+ * until the one that is not.
  */
 export async function tokenFor(
   chainId: number | undefined,
   address: string | undefined,
 ): Promise<OrderToken | undefined> {
-  if (!address) return undefined;
-  const methods = await listPaymentMethods();
-  const wanted = address.toLowerCase();
-
-  // With a chain id — the detail read has one — this is exact.
-  if (chainId !== undefined) {
-    return methods.find((m) => m.chain_id === chainId && m.address.toLowerCase() === wanted);
-  }
-
-  // Without one, match on the address alone. The LIST entity does not expose chain_id
-  // (only the single-payment view does), and a token address is per-chain, so this is
-  // the only key available there. Accepted only when it resolves to exactly one method:
-  // an address the merchant accepts on two chains is ambiguous, and rendering an amount
-  // with the wrong decimals is worse than not rendering the row. The real fix is on the
-  // gateway — chain_id on the list entity — not a guess here.
-  const matches = methods.filter((m) => m.address.toLowerCase() === wanted);
-  return matches.length === 1 ? matches[0] : undefined;
+  if (!address || chainId === undefined) return undefined;
+  return (await tokenCatalog()).get(tokenKey(chainId, address));
 }
 
 /**
@@ -152,7 +175,9 @@ export async function readOrder(rail0Id: string): Promise<Order | undefined> {
  * below drops anything: what the dashboard asks is "is there more to fetch", and the
  * answer belongs to the gateway.
  */
-export async function readOrders(limit = 50): Promise<{ orders: Order[]; total: number }> {
+export async function readOrders(
+  limit = 50,
+): Promise<{ orders: Order[]; total: number; unresolved: number }> {
   const seller = await clientFor("seller");
   const page = await seller.payments.list({
     payee: addressFor("seller"),
@@ -160,16 +185,26 @@ export async function readOrders(limit = 50): Promise<{ orders: Order[]; total: 
     per_page: limit,
   });
 
-  // One methods read for the whole page, not one per payment: tokenFor would otherwise
-  // re-fetch the merchant's wallets for every row of the order book.
-  const methods = await listPaymentMethods();
+  // One catalog read for the whole page, not one per payment: tokenFor would otherwise
+  // re-fetch it for every row of the order book.
+  const catalog = await tokenCatalog();
   const orders: Order[] = [];
+  let unresolved = 0;
   for (const payment of page.data ?? []) {
-    const wanted = payment.token?.toLowerCase();
-    const matches = methods.filter((m) => m.address.toLowerCase() === wanted);
-    if (matches.length === 1) orders.push(orderFrom(payment as PaymentLike, matches[0]));
+    const token =
+      payment.chain_id === undefined || !payment.token
+        ? undefined
+        : catalog.get(tokenKey(payment.chain_id, payment.token));
+    // Counted, not dropped in silence. A row the catalog cannot resolve is a
+    // configuration fault — a token missing from the gateway entirely — and the
+    // dashboard says so instead of showing a short list that looks complete.
+    if (!token) {
+      unresolved++;
+      continue;
+    }
+    orders.push(orderFrom(payment as PaymentLike, token));
   }
-  return { orders, total: page.meta?.total ?? orders.length };
+  return { orders, total: page.meta?.total ?? orders.length, unresolved };
 }
 
 /**

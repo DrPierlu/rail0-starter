@@ -53,6 +53,10 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
   // gateway's own count, so "show more" appears exactly when there is more.
   const [limit, setLimit] = useState(PAGE);
   const [total, setTotal] = useState(0);
+  // Rows the gateway returned that this page could not render, because their token is
+  // not in the gateway's catalog. Surfaced rather than swallowed: the count is the only
+  // sign that the list is shorter than the book.
+  const [unresolved, setUnresolved] = useState(0);
   const [acting, setActing] = useState<string | null>(null);
   /**
    * Orders whose capture or void the storefront has ACCEPTED, until the list stops
@@ -89,6 +93,7 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
       if (res.ok) {
         setOrders(body.orders);
         setTotal(typeof body.total === "number" ? body.total : body.orders.length);
+        setUnresolved(typeof body.unresolved === "number" ? body.unresolved : 0);
         // Forget a submitted action once its order is no longer escrowed — the
         // operation landed (or failed, or someone else moved it), and either way the
         // buttons this was holding down are not rendered any more. An order that has
@@ -333,10 +338,21 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
               )}
             </div>
           ))}
+          {/* A row whose token the gateway's catalog does not know cannot be priced, so
+              it is counted instead of rendered — a configuration fault, not a normal
+              state, and saying nothing would make a short list look complete. */}
+          {unresolved > 0 && (
+            <p className="pt-1 text-center text-[11px] text-amber-600 dark:text-amber-500">
+              {unresolved} {unresolved === 1 ? "order is" : "orders are"} in a token this gateway
+              has no catalog entry for, so {unresolved === 1 ? "it is" : "they are"} not shown —
+              check the gateway's tokens.
+            </p>
+          )}
           {/* Against the gateway's own count, not against what arrived: a page of ten
-              that returned ten says nothing about whether an eleventh exists, and a
-              payment in a token the merchant no longer accepts is dropped on the way
-              through (see readOrders), so the two numbers legitimately differ. */}
+              that returned ten says nothing about whether an eleventh exists. Since
+              rail0-gateway#193 put chain_id on list rows, every row whose token IS in the
+              catalog renders — retired tokens included — so the two numbers now differ
+              only by pagination (or by the count above). */}
           {total > limit && (
             <div className="pt-1 text-center">
               <button

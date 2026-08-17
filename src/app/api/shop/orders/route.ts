@@ -29,8 +29,11 @@ export async function GET(request: NextRequest) {
     const limit = Number.isFinite(asked)
       ? Math.min(Math.max(Math.trunc(asked), 1), MAX_LIMIT)
       : DEFAULT_LIMIT;
-    const { orders, total } = await readOrders(limit);
-    return NextResponse.json({ orders, total });
+    const { orders, total, unresolved } = await readOrders(limit);
+    // `unresolved` travels with the page: a row whose token the gateway catalog does not
+    // know cannot be rendered, and the dashboard says so rather than showing a list that
+    // looks complete (see readOrders).
+    return NextResponse.json({ orders, total, unresolved });
   } catch (error) {
     return errorResponse(error);
   }

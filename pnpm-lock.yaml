@@ -441,7 +441,7 @@ packages:
     resolution: {integrity: sha512-u6JZdLBTLotrNC9Vd6vPssINdzcCzleKAH6EJKImQb7GtYvX5keN2dxkoK44stCc4tffE6QQRtZTXVSzsLUlWA==}
 
   '@rail0/sdk@file:vendor/rail0-sdk-1.0.0.tgz':
-    resolution: {integrity: sha512-eK1K4KeKd0tIV6tr6ThMMMQ0w89HGPj55JFcJ7RntaQFfy40WiUhlsLKKo8bjVwuVylu/bWq7pO0xT82ZQ25uA==, tarball: file:vendor/rail0-sdk-1.0.0.tgz}
+    resolution: {integrity: sha512-Xa+dUiK0VpL6NRFScJ7QfmxkVVuR4WH4IoMPoaEebDpnyKaXr96LKA2jz6xqahDwT6lVbmqbWvQDzSO8Lw3p9w==, tarball: file:vendor/rail0-sdk-1.0.0.tgz}
     version: 1.0.0
     engines: {node: '>=22', pnpm: '>=9'}
 
