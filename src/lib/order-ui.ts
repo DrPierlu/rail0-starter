@@ -1,4 +1,4 @@
-import type { OrderState } from "./order-view";
+import type { OrderState, PriceCheck } from "./order-view";
 
 // Shared order-state presentation, used by both the buyer chat's live order
 // card and the merchant back-office so the same state always looks the same.
@@ -110,4 +110,43 @@ export function escrowSteps(state: OrderState): EscrowStep[] {
 export function waitExplainer(state: OrderState): string | undefined {
   if (!IN_FLIGHT_STATES.has(state)) return undefined;
   return "Waiting for the chain to call the block settled — not one confirmation, so this can take a few minutes on some chains. The funds are already committed on-chain.";
+}
+
+// ── The merchant's pre-escrow price check (#2) ───────────────────────────────
+
+export interface PriceCheckNote {
+  tone: "ok" | "bad";
+  text: string;
+}
+
+/**
+ * The price check as a line worth showing — or nothing, which is most of the time.
+ *
+ * The check is a FORECAST: the merchant prices the lines a payment claims to pay for
+ * against its own catalog and refuses to escrow anything that does not cover them
+ * (`authorizePayment`). Once the escrow exists the forecast is spent — an order that
+ * reached `in_escrow` passed the check by definition, and the state is the answer.
+ *
+ * Which is why the history shows nothing here. The catalog is live and the claim is not:
+ * rename a product in `catalog.json` and every past order that mentions it stops pricing,
+ * so a badge on the whole list announced "will not be escrowed" over funds captured weeks
+ * earlier. A verdict nobody can act on, that can only be wrong, is worse than no verdict.
+ *
+ * `authorizing` keeps the positive note and never a negative one: the broadcast that got
+ * there is what passing the check bought, and nothing that failed it can reach that state,
+ * so a red badge there could only be catalog drift.
+ */
+export function priceCheckNote(state: OrderState, check?: PriceCheck): PriceCheckNote | undefined {
+  if (!check) return undefined;
+  if (state !== "awaiting_payment" && state !== "authorizing") return undefined;
+  if (check.unpriceable || !check.covered) {
+    if (state !== "awaiting_payment") return undefined;
+    return {
+      tone: "bad",
+      text: check.unpriceable
+        ? `cannot be priced (${check.reason ?? "unknown items"}) — will not be escrowed`
+        : "underpaid — will not be escrowed",
+    };
+  }
+  return { tone: "ok", text: "covers the catalog price ✓" };
 }

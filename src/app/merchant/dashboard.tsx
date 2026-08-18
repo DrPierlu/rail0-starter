@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { priceCheckNote } from "@/lib/order-ui";
 import type { Order } from "@/lib/order-view";
 import { pollWhileVisible } from "@/lib/poll";
 import { ChainChip, CopyableId, StateBadge } from "../ui";
@@ -45,6 +46,37 @@ export function keepEscrowed<T>(
   const escrowed = new Set(orders.filter((o) => o.state === "in_escrow").map((o) => o.id));
   const kept = Object.entries(submitted).filter(([id]) => escrowed.has(id));
   return kept.length === Object.keys(submitted).length ? submitted : Object.fromEntries(kept);
+}
+
+/**
+ * The merchant pricing the buyer's claim against its own catalog (#2) — on the orders
+ * where that verdict is still about something.
+ *
+ * `priceCheckNote` owns the "still": before the escrow exists the check decides whether
+ * the funds move, and after it exists the state already says they did. Rendering it on
+ * every row instead put a live catalog in judgement over settled orders, which is how a
+ * captured order came to read "will not be escrowed".
+ */
+function PriceCheckLine({ order }: { order: Order }) {
+  const note = priceCheckNote(order.state, order.price_check);
+  if (!note || !order.price_check) return null;
+  const tone =
+    note.tone === "ok"
+      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      : "bg-red-500/10 text-red-600 dark:text-red-400";
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+      <span className="text-neutral-500">buyer&apos;s claim</span>
+      <span className="font-semibold tabular-nums">
+        {order.total} {order.token.symbol}
+      </span>
+      <span className="text-neutral-400">vs merchant catalog</span>
+      <span className="font-semibold tabular-nums">
+        {order.price_check.catalog_total} {order.token.symbol}
+      </span>
+      <span className={`rounded px-1.5 py-0.5 font-medium ${tone}`}>{note.text}</span>
+    </p>
+  );
 }
 
 export function MerchantDashboard({ devToken }: { devToken?: string }) {
@@ -205,6 +237,15 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
           escrowed funds are captured here after fulfilment
         </p>
       </div>
+      {/* Stated once rather than implied per row. It also names the thing this template does
+          differently from a shop with an order store: there, a payment is checked against the
+          order recorded at checkout — here an order IS the payment, so what it claims to buy
+          is priced against the catalog instead. */}
+      <p className="mt-1 text-xs text-neutral-500">
+        Orders are read from the gateway — there is no order store. Before escrowing, the storefront
+        prices what a payment claims to buy against its own catalog; a shop with an order store
+        would check it against the order it recorded at checkout.
+      </p>
       {error && (
         <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
           {error}
@@ -281,37 +322,7 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                 {order.payment_status && <span>payment: {order.payment_status}</span>}
                 {order.error && <span className="text-red-500">{order.error}</span>}
               </div>
-              {/* The control that guards the money, shown instead of hidden (#2). The lines
-                  above ride in the payment's metadata and are written by the BUYER, so they
-                  are a claim; the merchant prices that claim against its own catalog before
-                  escrowing anything, and this is that comparison. Green is not decoration:
-                  a claim that does not cover the catalog price, or that does not price at
-                  all, is refused by authorizePayment. */}
-              {order.price_check && (
-                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="text-neutral-500">buyer&apos;s claim</span>
-                  <span className="font-semibold tabular-nums">
-                    {order.total} {order.token.symbol}
-                  </span>
-                  <span className="text-neutral-400">vs merchant catalog</span>
-                  <span className="font-semibold tabular-nums">
-                    {order.price_check.catalog_total} {order.token.symbol}
-                  </span>
-                  {order.price_check.unpriceable ? (
-                    <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-600 dark:text-red-400">
-                      cannot be priced — will not be escrowed
-                    </span>
-                  ) : order.price_check.covered ? (
-                    <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
-                      covered ✓
-                    </span>
-                  ) : (
-                    <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-600 dark:text-red-400">
-                      underpaid — will not be escrowed
-                    </span>
-                  )}
-                </p>
-              )}
+              <PriceCheckLine order={order} />
               {order.state === "in_escrow" && submitted[order.id] && (
                 // One disabled control saying what is happening, rather than two greyed
                 // ones that look like a page that has stopped working. It stays until

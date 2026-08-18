@@ -1,5 +1,6 @@
 import { formatAmount, signTransaction } from "@rail0/sdk";
 import { env } from "./env";
+import { logEvent, short, startOp } from "./log";
 import {
   exactAmount,
   type Order,
@@ -167,6 +168,9 @@ export async function readOrder(rail0Id: string): Promise<Order | undefined> {
  * merchant pricing a claim against its own catalog — the same computation
  * `authorizePayment` gates on, surfaced so the dashboard can show it happening. Cheap and
  * local: no gateway call, just the catalog and the arithmetic.
+ *
+ * Computed for every order, shown for almost none: `priceCheckNote` decides where the
+ * verdict still means something, and after the escrow exists it does not.
  */
 function priceCheckFor(order: Order): PriceCheck {
   const claimed = order.lines.map((line) => ({ product_id: line.product_id, qty: line.qty }));
@@ -176,10 +180,17 @@ function priceCheckFor(order: Order): PriceCheck {
       catalog_total: priced.total,
       covered: coversCatalogPrice(claimed, order.total_base, order.token.decimals),
     };
-  } catch {
+  } catch (error) {
     // An unknown product or an empty claim does not price — and an order the merchant
-    // cannot price is one it must not fulfil, which is why this is not "covered".
-    return { catalog_total: "—", covered: false, unpriceable: true };
+    // cannot price is one it must not fulfil, which is why this is not "covered". The
+    // reason travels with the verdict: "unknown product: pouch" is usually a catalog
+    // edit, and reading it as a refused payment is how this line got misleading.
+    return {
+      catalog_total: "—",
+      covered: false,
+      unpriceable: true,
+      reason: error instanceof QuoteError ? error.message : "could not be priced",
+    };
   }
 }
 
@@ -253,10 +264,17 @@ export async function readOrders(
  * buyer's funds are moving and a 422 here would read as "your payment failed".
  */
 export async function authorizePayment(rail0Id: string): Promise<Order> {
+  const op = startOp("authorize", { payment: short(rail0Id) });
   const seller = await clientFor("seller");
   const payment = await seller.payments.get(rail0Id);
 
   if (payment.payee.toLowerCase() !== addressFor("seller").toLowerCase()) {
+    // Logged rather than only returned: a payment addressed to someone else arriving at
+    // this merchant's authorize is the one refusal here that is interesting on its own.
+    logEvent("authorize refused", {
+      payment: short(rail0Id),
+      reason: "payee is not this merchant",
+    });
     throw new ShopError(422, "payment payee is not this merchant");
   }
   if (payment.mode !== "authorize") {
@@ -272,6 +290,14 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
     // "2600000 does not cover 2610000" is unreadable exactly where the numbers matter
     // most. Raw base units stay as a debugging adjunct.
     const human = `${formatAmount(payment.amount, token.decimals)} ${token.symbol}`;
+    // The security event of the whole flow — the claim did not cover the catalog — so it
+    // gets a line of its own instead of being visible only to whoever read the 422.
+    logEvent("authorize refused", {
+      payment: short(rail0Id),
+      chain: payment.chain_id,
+      amount: human,
+      reason: "does not cover the catalog price",
+    });
     throw new ShopError(
       422,
       `payment of ${human} does not cover the catalog price of the items it claims ` +
@@ -283,7 +309,12 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
     throw new ShopError(422, "the payer has not signed this payment yet");
   }
   if (payment.status !== "signed") {
-    return orderFrom(payment as PaymentLike, token);
+    // The idempotent path: an earlier call already authorized this and its response was
+    // lost. Worth a line, because from the outside it is indistinguishable from a no-op —
+    // and because a retry storm shows up here first.
+    const known = orderFrom(payment as PaymentLike, token);
+    op.ok({ chain: token.chain_id, state: known.state, note: "already authorized" });
+    return known;
   }
 
   const prep = await seller.payments.authorizePrepare(rail0Id);
@@ -297,11 +328,14 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
     ),
   });
 
-  return await reread(rail0Id, payment as PaymentLike, token);
+  const order = await reread(rail0Id, payment as PaymentLike, token);
+  op.ok({ chain: token.chain_id, amount: `${order.total} ${token.symbol}`, state: order.state });
+  return order;
 }
 
 /** Capture the full escrowed amount — the merchant settles after fulfilment. */
 export async function captureOrder(rail0Id: string): Promise<Order> {
+  const op = startOp("capture", { payment: short(rail0Id) });
   const order = await requireOrderInState(rail0Id, "in_escrow");
   const seller = await clientFor("seller");
   // capture/refund prepare, like create, take the HUMAN decimal amount — the WHOLE of
@@ -321,11 +355,18 @@ export async function captureOrder(rail0Id: string): Promise<Order> {
       env().SELLER_PRIVATE_KEY as `0x${string}`,
     ),
   });
-  return await reread(rail0Id, undefined, order.token);
+  const captured = await reread(rail0Id, undefined, order.token);
+  op.ok({
+    chain: order.token.chain_id,
+    amount: `${order.total} ${order.token.symbol}`,
+    state: captured.state,
+  });
+  return captured;
 }
 
 /** Void the authorization — cancels the order and returns the escrow to the buyer. */
 export async function voidOrder(rail0Id: string): Promise<Order> {
+  const op = startOp("void", { payment: short(rail0Id) });
   const order = await requireOrderInState(rail0Id, "in_escrow");
   const seller = await clientFor("seller");
   const prep = await seller.payments.voidPrepare(rail0Id);
@@ -338,7 +379,13 @@ export async function voidOrder(rail0Id: string): Promise<Order> {
       env().SELLER_PRIVATE_KEY as `0x${string}`,
     ),
   });
-  return await reread(rail0Id, undefined, order.token);
+  const voided = await reread(rail0Id, undefined, order.token);
+  op.ok({
+    chain: order.token.chain_id,
+    amount: `${order.total} ${order.token.symbol}`,
+    state: voided.state,
+  });
+  return voided;
 }
 
 /**

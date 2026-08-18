@@ -65,7 +65,8 @@ signing its own transactions.
 3. The storefront re-prices what the payment claims to buy against its own
    catalog, checks it pays the right payee in an accepted token, and broadcasts
    the **authorize**: the buyer's funds are now in on-chain escrow. The order
-   shows `in_escrow`.
+   shows `in_escrow`. (That re-pricing stands in for a lookup a real shop does
+   against its own order store — see the notes below.)
 4. On `/merchant`, fulfil the order: **capture** settles the funds to the
    merchant. Or **void** it: the escrow returns to the buyer.
 
@@ -130,6 +131,23 @@ a rail0 gateway to talk to, and an Anthropic API key.
    origin from, so it is told via `SHOP_URL` — and `bin/dev` derives that from
    the same port it binds. Left to drift, the agent's shop calls landed on
    rail0-admin, which answers them.
+
+**What the server logs.** Next's per-request log is silenced for the three polled
+routes (the order list, an order's detail, the budget chip) — visible-tab polling made
+it hundreds of identical `GET /api/shop/orders 200 in 24ms` lines, which is the one
+shape of line that never carries information. Everything else still logs its status,
+and [`src/lib/log.ts`](src/lib/log.ts) adds one line per gateway operation instead:
+
+```
+rail0 siwe login role=seller address=0x1234abcd…ef9012 expires=2026-08-18T18:22:04Z
+rail0 authorize ok payment=0x3f0a12bc…9c1b4d chain=84532 amount=7.09 USDC state=authorizing 812ms
+rail0 authorize refused payment=0x77de01aa…2b0f31 chain=84532 amount=2.60 USDC reason=does not cover the catalog price
+rail0 capture ok payment=0x3f0a12bc…9c1b4d chain=84532 amount=7.09 USDC state=capturing 640ms
+```
+
+Keys, signatures, signed transactions and tokens never reach it: fields are passed by
+name, and secret-looking names are dropped and long values truncated as a backstop. Set
+`STARTER_LOG=off` to silence these too.
 
 `next.config.ts` allows `127.0.0.1` as a dev origin. A browser treats it as a
 different origin from `localhost`, and Next blocks cross-origin requests to its dev
@@ -295,6 +313,16 @@ Manual equivalent, and what to set up once:
   the payment cannot carry (fulfilment, addresses, an internal order number), that is
   where a real database goes — keyed by `rail0_id`, alongside the payment rather than
   duplicating it.
+
+  **This re-pricing is a stand-in, not a pattern to copy.** With an order store you
+  already have the answer: the order recorded at checkout says what it should cost, and
+  authorizing checks the payment against that record. Re-pricing exists here only
+  because there is no record — the catalog is the one thing the payer cannot write. Two
+  consequences worth keeping in mind if you build on this: the catalog is live while a
+  claim is frozen, so editing `catalog.json` changes the verdict on past orders (which
+  is why `/merchant` shows it only before the escrow exists — see
+  [`priceCheckNote`](src/lib/order-ui.ts)), and a shop whose prices move at all needs
+  the recorded order rather than this.
 - **The seller key in an env var** is demo-grade: in production it belongs in
   a proper secret store or signer. The buyer side already models the real
   thing — the key stays in the buyer's own wallet, and the gateway never

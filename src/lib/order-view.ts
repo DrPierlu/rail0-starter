@@ -65,6 +65,13 @@ export interface Order {
    * claim; `authorizePayment` prices that claim itself before escrowing anything. This
    * carries the comparison so the UI can show the control happening instead of leaving
    * the most important line of the demo invisible.
+   *
+   * It stands in for a LOOKUP, not for a mechanism of its own. A shop with an order store
+   * checks a payment against the order it recorded at checkout; there is no store here, so
+   * the catalog is the only record of what things cost that the payer cannot write.
+   *
+   * And it is a forecast, spent the moment the escrow exists — which is why the UI shows
+   * it only before then (see `priceCheckNote` in order-ui).
    */
   price_check?: PriceCheck;
 }
@@ -76,6 +83,14 @@ export interface PriceCheck {
   covered: boolean;
   /** Set when the claim does not price at all (unknown product, or no lines). */
   unpriceable?: boolean;
+  /**
+   * Why it does not price, when `unpriceable` — e.g. `unknown product: pouch`.
+   *
+   * Carried because the verdict alone cannot tell a claim that names something the shop
+   * never sold from a product renamed in `catalog.json` after the order was placed. The
+   * first is an attack, the second is housekeeping, and only the reason separates them.
+   */
+  reason?: string;
 }
 
 /** The compact metadata shape: short keys, because 4096 bytes is the whole budget. */
