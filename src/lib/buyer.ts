@@ -180,6 +180,22 @@ export async function createPayment(input: {
   tokenAddress: string;
   siweMessage: string;
   siweSignature: string;
+  /**
+   * The card's own checkout id, sent as the gateway's Idempotency-Key.
+   *
+   * Creating a payment is the ONE step of this flow with no natural guard — sign is
+   * idempotent, authorize is documented as such, capture and void are gated on the
+   * order's state — so it was the one that could run twice. The card holds the new
+   * payment's id in component state, and a remount (hopping to /merchant mid-checkout,
+   * a reload) loses it and starts over: without a key, "start over" meant a second
+   * payment rather than the same one.
+   *
+   * The gateway binds the key to the request's TERMS, so a replay of these items
+   * answers 200 with the existing payment and its signing payload, while the same key
+   * against a changed cart is refused with 422 rather than silently signing something
+   * else. Scoped to the payer, so it is not a handle anyone else can pull on.
+   */
+  idempotencyKey?: string;
 }): Promise<CreatedPayment> {
   const quote = await getShop(input.base).quote(input.items, input.chainId, input.tokenAddress);
 
@@ -187,24 +203,27 @@ export async function createPayment(input: {
   const auth = await client.auth.verify(input.siweMessage, input.siweSignature);
   client.setAuthToken(auth.token);
 
-  const payment = await client.payments.create({
-    chain_id: quote.token.chain_id,
-    mode: "authorize",
-    amount: quote.total,
-    token: quote.token.address,
-    // The address the GATEWAY recovered from the signature, not one the caller supplied:
-    // the payer is whoever proved they hold the key, and nothing else gets a say.
-    payer: auth.address,
-    payee: quote.payee,
-    description: describe(quote.lines),
-    // The ORDER travels with the payment, because the payment IS the order now. The
-    // gateway keeps `metadata` (jsonb, 4096 bytes) and that is where the lines live.
-    //
-    // Written by the PAYER, so it is a claim rather than a merchant record: the
-    // storefront prices it against its own catalog before authorizing the escrow
-    // (shop.ts, coversCatalogPrice).
-    metadata: packLines(quote.lines),
-  });
+  const payment = await client.payments.create(
+    {
+      chain_id: quote.token.chain_id,
+      mode: "authorize",
+      amount: quote.total,
+      token: quote.token.address,
+      // The address the GATEWAY recovered from the signature, not one the caller supplied:
+      // the payer is whoever proved they hold the key, and nothing else gets a say.
+      payer: auth.address,
+      payee: quote.payee,
+      description: describe(quote.lines),
+      // The ORDER travels with the payment, because the payment IS the order now. The
+      // gateway keeps `metadata` (jsonb, 4096 bytes) and that is where the lines live.
+      //
+      // Written by the PAYER, so it is a claim rather than a merchant record: the
+      // storefront prices it against its own catalog before authorizing the escrow
+      // (shop.ts, coversCatalogPrice).
+      metadata: packLines(quote.lines),
+    },
+    input.idempotencyKey,
+  );
 
   if (!payment.signing_payload) {
     throw new Error("gateway returned no signing payload for the new payment");

@@ -107,6 +107,11 @@ export function CheckoutCard({
       const created = await post<{ rail0_id: string; signing_payload: SigningPayload }>(
         "/api/checkout/create",
         {
+          // The card's identity, doubling as the Idempotency-Key. This card can run its
+          // create more than once — the wallet prompt is cancellable, and a remount
+          // (hopping to /merchant mid-checkout) restarts it having lost the payment id it
+          // held in state — and every one of those runs used to mint a NEW payment.
+          checkout_id: output.checkout_id,
           items: output.items,
           chain_id: output.chain_id,
           token_address: output.token_address,
