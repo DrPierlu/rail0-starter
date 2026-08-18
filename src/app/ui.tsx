@@ -116,6 +116,50 @@ export function EscrowTrail({
 }
 
 /**
+ * A chain's mark: its own colour, and two letters standing in for its logo.
+ *
+ * Letters and not the brands' own artwork, deliberately. A template that ships five
+ * companies' logos ships five trademark questions with them, and an icon in a demo is
+ * not worth that — the colour is what the eye actually sorts a list by, and it needs no
+ * permission. Swap these for the real marks in your own deployment if you have the right
+ * to; the shape of this map is the seam for it.
+ *
+ * Keyed by chain id rather than name, because the name is the gateway's label and can be
+ * edited in seeds without anything here noticing.
+ */
+const CHAIN_MARKS: Record<number, { initials: string; className: string }> = {
+  5042002: { initials: "AR", className: "bg-[#0a5aff] text-white" }, // Arc Testnet
+  84532: { initials: "BA", className: "bg-[#0052ff] text-white" }, // Base Sepolia
+  11155420: { initials: "OP", className: "bg-[#ff0420] text-white" }, // Optimism Sepolia
+  421614: { initials: "AB", className: "bg-[#12aaff] text-white" }, // Arbitrum Sepolia
+  80002: { initials: "PO", className: "bg-[#8247e5] text-white" }, // Polygon Amoy
+};
+
+/**
+ * The mark to draw for a chain, known or not.
+ *
+ * A chain missing from the map still gets one, in neutral grey with initials from the
+ * words of its name ("Foo Sepolia" → FS): a hole in a column of coloured dots reads as a
+ * rendering failure, which is worse than a plain dot. New chains arrive by a seeds edit in
+ * the gateway, not by a release of this app, so that path is the normal one.
+ */
+export function chainMark(
+  chainId: number | undefined,
+  label: string,
+): { initials: string; className: string } {
+  const known = chainId === undefined ? undefined : CHAIN_MARKS[chainId];
+  if (known) return known;
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  const initials =
+    words.length === 0
+      ? "??"
+      : words.length === 1
+        ? words[0].slice(0, 2).toUpperCase()
+        : `${words[0][0]}${words[1][0]}`.toUpperCase();
+  return { initials, className: "bg-neutral-400 text-white dark:bg-neutral-600" };
+}
+
+/**
  * The chain an order lives on, as a chip beside its amount.
  *
  * It reads as decoration and is not: the chain decides which token's `decimals` the
@@ -123,12 +167,26 @@ export function EscrowTrail({
  * every other number on the card legible. It was available only as grey micro-copy in a
  * meta row, and it is available at all on list rows only since rail0-gateway#193 put
  * `chain_id` there.
+ *
+ * The mark carries the same information as the label, one glance earlier: down a list of
+ * orders on two chains, colour separates them without reading a word. The label stays —
+ * "Base Sepolia" and "Base" are not the same chain, and no dot can say which one this is.
  */
-export function ChainChip({ name }: { name?: string }) {
-  if (!name) return null;
+export function ChainChip({ chainId, name }: { chainId?: number; name?: string }) {
+  const label = name ?? (chainId === undefined ? undefined : `chain ${chainId}`);
+  if (!label) return null;
+  const mark = chainMark(chainId, label);
   return (
-    <span className="rounded-full bg-neutral-500/10 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
-      {name}
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-500/10 py-0.5 pr-2 pl-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+      {/* aria-hidden: the label right beside it says the same thing, and a screen reader
+          reading "AR Arc Testnet" is worse than one reading "Arc Testnet". */}
+      <span
+        aria-hidden="true"
+        className={`inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold leading-none tracking-tight ${mark.className}`}
+      >
+        {mark.initials}
+      </span>
+      {label}
     </span>
   );
 }

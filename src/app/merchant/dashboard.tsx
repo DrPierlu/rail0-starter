@@ -308,19 +308,31 @@ export function MerchantDashboard({ devToken }: { devToken?: string }) {
                     raw across the row. */}
                 <CopyableId value={order.id} />
                 <StateBadge state={order.state} />
-                <span className="ml-auto flex items-center gap-2 text-sm font-semibold">
-                  <ChainChip name={order.token.chain_name} />
-                  <span>
+                {/* Two fixed columns, so the chain marks and the decimal points line up
+                    down the whole list. Left to flow, each row placed its chip wherever
+                    its own chain name ended — "Arbitrum Sepolia" pushed the column two
+                    centimetres left of "Arc Testnet", and a list of amounts you cannot
+                    read as a column is a list you have to read one row at a time. Fixed
+                    only from `sm` up: on a phone the row wraps and the widths would just
+                    reserve space nothing can use. */}
+                <span className="ml-auto flex shrink-0 items-center gap-3 text-sm font-semibold">
+                  <span className="sm:w-36">
+                    <ChainChip chainId={order.token.chain_id} name={order.token.chain_name} />
+                  </span>
+                  <span className="tabular-nums sm:w-28 sm:text-right">
                     {order.total} {order.token.symbol}
                   </span>
                 </span>
               </div>
-              <p className="mt-1 text-sm text-neutral-500">
-                {order.lines.map((l) => `${l.qty} × ${l.name}`).join(" · ")}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
-                {order.payment_status && <span>payment: {order.payment_status}</span>}
-                {order.error && <span className="text-red-500">{order.error}</span>}
+              {/* One line of context, not two: the items and the payment's own word for
+                  where it is are both micro-copy about the same order, and splitting them
+                  across two rows made every card three rows tall to say six words. */}
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-500">
+                <span>{order.lines.map((l) => `${l.qty} × ${l.name}`).join(" · ")}</span>
+                {order.payment_status && (
+                  <span className="text-xs">· payment: {order.payment_status}</span>
+                )}
+                {order.error && <span className="text-xs text-red-500">· {order.error}</span>}
               </div>
               <PriceCheckLine order={order} />
               {order.state === "in_escrow" && submitted[order.id] && (

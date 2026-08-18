@@ -99,7 +99,7 @@ export function OrderCard({
         <CopyableId value={order.id} />
         <StateBadge state={order.state} />
         <span className="ml-auto flex items-center gap-2 text-sm font-semibold">
-          <ChainChip name={order.token.chain_name} />
+          <ChainChip chainId={order.token.chain_id} name={order.token.chain_name} />
           <span>
             {order.total} {order.token.symbol}
           </span>
