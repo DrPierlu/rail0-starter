@@ -6,9 +6,12 @@ import { Streamdown } from "streamdown";
 import {
   type ChatRecord,
   chatTitle,
+  clearCurrentChatId,
   forgetChat,
+  readCurrentChatId,
   readHistory,
   rememberChat,
+  setCurrentChatId,
 } from "@/lib/chat-history";
 import { type CheckoutEvent, pendingCheckout } from "@/lib/checkout-step";
 import { pickSuggestions } from "@/lib/suggestions";
@@ -20,10 +23,14 @@ import { EveToolView } from "./eve-tool-view";
 import { orderCardOrderId } from "./tool-views";
 import { WalletChip, WalletProvider } from "./wallet";
 
-// Conversations are kept in localStorage and NONE is resumed automatically — the clean
-// open comes from what the page mounts, not from what the browser threw away (see
-// lib/chat-history). The eve session itself is durable on the server; a record holds the
-// cursor to resume it plus the rendered event log to draw it with.
+// Conversations are kept in localStorage and the clean open comes from what the page
+// mounts, not from what the browser threw away (see lib/chat-history). The eve session
+// itself is durable on the server; a record holds the cursor to resume it plus the
+// rendered event log to draw it with.
+//
+// What this mount opens on is decided by a sessionStorage pointer: set, this visit was
+// already in a conversation (it went to /merchant and came back — a full unmount) and
+// that one reopens; absent, this is a fresh tab and the chat opens clean.
 
 // useEveAgent reads its session options once, when it creates its store — so the
 // component that calls it can only mount after sessionStorage has been read,
@@ -44,14 +51,25 @@ export default function BuyerPage() {
   // different … session"): a new store reads sessionStorage again, finds it cleared, and
   // gets initialSession: undefined.
   const [epoch, setEpoch] = useState(0);
-  // Which past conversation the mounted chat was opened on, if any. Undefined is the
-  // default and the point: the first open of the tab is always a clean chat, even though
-  // the history below survived the last one.
+  // Which past conversation the mounted chat was opened on, if any. Undefined means a
+  // clean chat: the first open of a TAB, even though the history below outlived the last.
   const [resumed, setResumed] = useState<ChatRecord | undefined>(undefined);
   // The list itself lives HERE, in the component that survives the remount, so resuming
   // or starting over does not re-read storage and cannot show a stale count.
   const [history, setHistory] = useState<readonly ChatRecord[]>([]);
-  useEffect(() => setHistory(readHistory(localStorage)), []);
+  // ONE effect, because the two reads answer one question — what should this mount open
+  // on? Both setStates land before EveChat first mounts (it waits on `allowed`, which is
+  // a fetch), so the chat is built with its `initial` already resolved and never has to
+  // be remounted to pick it up.
+  useEffect(() => {
+    const chats = readHistory(localStorage);
+    setHistory(chats);
+    const current = readCurrentChatId(sessionStorage);
+    // A pointer at a chat that is no longer in the list (evicted at MAX_CHATS, or
+    // forgotten in another tab) resolves to undefined — which opens clean, the same
+    // answer as no pointer at all.
+    if (current) setResumed(chats.find((chat) => chat.id === current));
+  }, []);
   // Whether this visitor may talk to the agent at all. Undefined until asked, so the
   // page shows neither the chat nor a sign-in form while it does not know — a form
   // that flashes and vanishes reads as a bug.
@@ -90,10 +108,15 @@ export default function BuyerPage() {
         history={history}
         onHistoryChange={setHistory}
         onResume={(chat) => {
+          setCurrentChatId(sessionStorage, chat.id);
           setResumed(chat);
           setEpoch((e) => e + 1);
         }}
         onNewConversation={() => {
+          // Clear the pointer BEFORE remounting: the fresh chat writes its own the moment
+          // it has a session id, and leaving the old one up until then would reopen the
+          // abandoned conversation if the visitor hopped to /merchant in between.
+          clearCurrentChatId(sessionStorage);
           setResumed(undefined);
           setEpoch((e) => e + 1);
         }}
@@ -217,6 +240,27 @@ function EveChat({
   // title it already had rather than being renamed by its next turn.
   const titleRef = useRef<string | undefined>(initial?.title);
 
+  // Write the live conversation into the list, and point this visit at it.
+  //
+  // Shared by the two moments a chat must become findable: every finished turn, and the
+  // instant a brand-new session gets its id. Saving ONLY at onFinish is what made a first
+  // turn interrupted by a hop to /merchant vanish outright — the unmount takes onFinish
+  // with it, so nothing ever recorded the id, while the turn itself kept running (and
+  // billing) on the eve server with nobody able to reach it again.
+  const save = useCallback(
+    (chat: Pick<ChatRecord, "id" | "events" | "session">) => {
+      setCurrentChatId(sessionStorage, chat.id);
+      onHistoryChange(
+        rememberChat(localStorage, {
+          ...chat,
+          savedAt: Date.now(),
+          title: chatTitle(titleRef.current),
+        }),
+      );
+    },
+    [onHistoryChange],
+  );
+
   const agent = useEveAgent({
     initialEvents: initial?.events ?? [],
     initialSession: initial?.session,
@@ -227,17 +271,21 @@ function EveChat({
       // before the session existed) means there is nothing resumable to keep.
       const id = snapshot.session?.sessionId ?? initial?.id;
       if (!id) return;
-      onHistoryChange(
-        rememberChat(localStorage, {
-          id,
-          savedAt: Date.now(),
-          title: chatTitle(titleRef.current),
-          events: snapshot.events,
-          session: snapshot.session,
-        }),
-      );
+      save({ id, events: snapshot.events, session: snapshot.session });
     },
   });
+
+  // Registration, not saving: the id is what makes the conversation reachable again, and
+  // it exists from the first turn's start — long before that turn ends. Keyed on the id
+  // ALONE on purpose. The transcript is written by onFinish; re-running this as events
+  // arrive would serialize the whole log into localStorage on every token, and the record
+  // it would write mid-stream is one no reader ever asked to keep.
+  const sessionId = agent.session?.sessionId;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the id appearing, not on the transcript
+  useEffect(() => {
+    if (!sessionId || discardedRef.current) return;
+    save({ id: sessionId, events: agent.events, session: agent.session });
+  }, [sessionId, save]);
 
   const busy = agent.status === "submitted" || agent.status === "streaming";
 
@@ -412,7 +460,13 @@ function EveChat({
           <ChatHistoryMenu
             chats={history}
             onResume={onResume}
-            onForget={(id) => onHistoryChange(forgetChat(localStorage, id))}
+            onForget={(id) => {
+              // Deleting the conversation this visit points at leaves a dangling pointer.
+              // Harmless on mount (it resolves to undefined and opens clean) but cleared
+              // here anyway, so "forget this chat" leaves nothing of it behind.
+              if (readCurrentChatId(sessionStorage) === id) clearCurrentChatId(sessionStorage);
+              onHistoryChange(forgetChat(localStorage, id));
+            }}
           />
           <WalletChip />
         </div>

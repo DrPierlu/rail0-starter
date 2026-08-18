@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   type ChatRecord,
   chatTitle,
+  clearCurrentChatId,
+  CURRENT_KEY,
   forgetChat,
   HISTORY_KEY,
   MAX_CHATS,
+  readCurrentChatId,
   readHistory,
   relativeTime,
   rememberChat,
+  setCurrentChatId,
   type StorageLike,
 } from "@/lib/chat-history";
 
@@ -17,6 +21,9 @@ import {
  * What this pins is the pair of requirements that used to be mutually exclusive: the chat
  * opens clean (nothing here resumes anything on its own — that is the page's mount) and
  * the conversations survive the tab that held them.
+ *
+ * The current-chat pointer is the third: which conversation ONE VISIT is in, so walking
+ * to /merchant and back does not read as having lost it.
  */
 
 class FakeStorage implements StorageLike {
@@ -128,5 +135,55 @@ describe("relativeTime", () => {
     expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3h ago");
     expect(relativeTime(now - 26 * 3_600_000, now)).toBe("yesterday");
     expect(relativeTime(now - 3 * 86_400_000, now)).toBe("3 days ago");
+  });
+});
+
+describe("the current-chat pointer", () => {
+  it("is absent until something points it somewhere — a fresh tab opens clean", () => {
+    expect(readCurrentChatId(storage)).toBeUndefined();
+  });
+
+  it("round-trips, and is cleared outright rather than blanked", () => {
+    setCurrentChatId(storage, "session-1");
+    expect(readCurrentChatId(storage)).toBe("session-1");
+    setCurrentChatId(storage, "session-2");
+    expect(readCurrentChatId(storage)).toBe("session-2");
+    clearCurrentChatId(storage);
+    expect(readCurrentChatId(storage)).toBeUndefined();
+    expect(storage.getItem(CURRENT_KEY)).toBeNull();
+  });
+
+  it("lives apart from the list, so clearing one leaves the other", () => {
+    rememberChat(storage, chat("session-1", 1));
+    setCurrentChatId(storage, "session-1");
+    clearCurrentChatId(storage);
+    // The conversation is still THERE — the visit just no longer opens on it.
+    expect(readHistory(storage).map((c) => c.id)).toEqual(["session-1"]);
+  });
+
+  it("survives storage that throws, because a resume hint is never worth a broken page", () => {
+    const dead: StorageLike = {
+      getItem() {
+        throw new Error("SecurityError");
+      },
+      setItem() {
+        throw new Error("SecurityError");
+      },
+      removeItem() {
+        throw new Error("SecurityError");
+      },
+    };
+    expect(() => setCurrentChatId(dead, "session-1")).not.toThrow();
+    expect(readCurrentChatId(dead)).toBeUndefined();
+    expect(() => clearCurrentChatId(dead)).not.toThrow();
+  });
+
+  it("can point at a chat the list no longer holds — the page opens clean on it", () => {
+    // MAX_CHATS eviction, or a delete in another tab. The pointer is a hint, not a
+    // guarantee, and the mount resolves it against the list rather than trusting it.
+    setCurrentChatId(storage, "evicted");
+    for (let i = 0; i <= MAX_CHATS; i++) rememberChat(storage, chat(`chat-${i}`, i + 1));
+    const chats = readHistory(storage);
+    expect(chats.find((c) => c.id === readCurrentChatId(storage))).toBeUndefined();
   });
 });

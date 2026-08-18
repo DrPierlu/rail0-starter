@@ -9,7 +9,13 @@ import type { ClientSessionState, MessageStreamEvent } from "eve/client";
  * die with the tab — which delivered the clean open by throwing the history away.
  *
  * So: localStorage, and the clean open comes from WHAT IS MOUNTED rather than from what
- * survived. Nothing is resumed automatically; the list is offered and the reader picks.
+ * survived. The list is offered and the reader picks.
+ *
+ * With ONE exception, and it is the demo's main gesture: hopping to /merchant to capture
+ * and back is a full unmount of the buyer page, and returning to a blank chat read as
+ * having lost the conversation. So the chat a VISIT is currently in is pointed at from
+ * sessionStorage — which dies with the tab, exactly the scope the transcript used to have.
+ * A new tab, or the next person, still gets a clean open; walking across the demo does not.
  *
  * Still no server store — this is the browser's own memory of its own chats, keyed by the
  * eve session id. The conversation itself is durable on the eve server; what is kept here
@@ -35,6 +41,15 @@ export interface ChatRecord {
 }
 
 export const HISTORY_KEY = "rail0-starter:eve-chats";
+
+/**
+ * Which conversation THIS VISIT is in — an id into the list above, held in sessionStorage.
+ *
+ * Deliberately a different storage than the list it points into. The list is the browser's
+ * memory across visits (localStorage); this is one visit's place in it, and it must die
+ * when the tab does or the next person inherits a chat mid-flight.
+ */
+export const CURRENT_KEY = "rail0-starter:eve-current";
 
 /**
  * How many conversations to keep.
@@ -127,6 +142,40 @@ export function forgetChat(storage: StorageLike, id: string): ChatRecord[] {
     // nothing to do — the list in memory is what the caller renders
   }
   return kept;
+}
+
+/**
+ * The conversation this visit is in, if any.
+ *
+ * Tolerant like readHistory, and for the same reason: storage can be disabled outright
+ * (Safari private mode throws on access), and a page that will not render because it could
+ * not read a resume hint is worse than one that opens clean.
+ */
+export function readCurrentChatId(storage: StorageLike): string | undefined {
+  try {
+    return storage.getItem(CURRENT_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Point this visit at a conversation — on resume, and on every save of the live one. */
+export function setCurrentChatId(storage: StorageLike, id: string): void {
+  try {
+    storage.setItem(CURRENT_KEY, id);
+  } catch {
+    // Storage disabled or full. The chat still works; only the return-from-merchant
+    // convenience is lost, which is the right thing to sacrifice here.
+  }
+}
+
+/** Forget where this visit was — "New conversation", and deleting the chat you are in. */
+export function clearCurrentChatId(storage: StorageLike): void {
+  try {
+    storage.removeItem(CURRENT_KEY);
+  } catch {
+    // as above
+  }
 }
 
 /** "just now" / "12 min ago" / "3 days ago" — enough to tell two chats apart. */
