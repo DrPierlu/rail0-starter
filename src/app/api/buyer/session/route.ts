@@ -22,8 +22,9 @@ const MAX_AGE_SECS = 8 * 60 * 60;
 
 export async function GET(request: NextRequest) {
   // `required` is what the page actually needs: on a local dev server the channel is
-  // open without a cookie (eve's localDev), and asking for a token there would put a
-  // form in front of a chat that works.
+  // open without a cookie (eve's localDev in the agent process), and asking for a token
+  // there would put a form in front of a chat that works — and ask for BUYER_TOKEN,
+  // which a local run does not set.
   return NextResponse.json({
     signed_in: hasBuyerSession(request.headers.get("cookie")),
     required: !channelOpenLocally(),
