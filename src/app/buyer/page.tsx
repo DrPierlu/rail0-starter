@@ -221,12 +221,22 @@ function EveChat({
   // client-only: BuyerPage renders an empty shell until `mounted`, so EveChat never
   // renders on the server and there is no markup for the client to disagree with.
   const [suggestions] = useState(() => pickSuggestions(4));
-  // Checkouts finished in this tab. The docked box needs it to know when to let go, and
-  // the transcript stub needs it to read as done rather than as still waiting.
-  const [doneKeys, setDoneKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const onDone = useCallback((key: string) => {
-    setDoneKeys((current) => new Set(current).add(key));
-  }, []);
+  // Checkouts finished in this conversation. The docked box needs it to know when to let
+  // go, and the transcript stub needs it to read as done rather than as still waiting.
+  //
+  // SEEDED FROM THE RECORD, and that is not a nicety. The transcript alone only proves a
+  // checkout finished once the agent's next order_status lands after it; until then this
+  // set is the sole proof. Restoring the transcript without it made a resumed chat offer
+  // an already-paid checkout again, and the card creates a NEW payment each time — so a
+  // buyer who trusted the box paid for the same thing twice (two escrows, 85 seconds
+  // apart, before this was found).
+  const [doneKeys, setDoneKeys] = useState<ReadonlySet<string>>(
+    () => new Set<string>(initial?.completed ?? []),
+  );
+  // The same set as a ref. onFinish is read ONCE when the store is built (see the epoch
+  // comment above), so anything it calls closes over the state as it was at mount — an
+  // empty set, forever. The ref is what save() actually reads.
+  const doneKeysRef = useRef<ReadonlySet<string>>(doneKeys);
 
   // Set the instant a new conversation is requested. The turn being aborted can still
   // settle and call onFinish, which would write the OLD transcript back into
@@ -255,6 +265,7 @@ function EveChat({
           ...chat,
           savedAt: Date.now(),
           title: chatTitle(titleRef.current),
+          completed: [...doneKeysRef.current],
         }),
       );
     },
@@ -274,6 +285,22 @@ function EveChat({
       save({ id, events: snapshot.events, session: snapshot.session });
     },
   });
+
+  // A checkout finished: remember it, and WRITE IT DOWN NOW rather than at the end of
+  // the next turn. The window this closes is exactly the one that produced the double
+  // purchase — pay, hop to /merchant to capture, come back before the agent's
+  // order_status has landed. Waiting for onFinish would leave that gap unrecorded, which
+  // is the same hole one level down.
+  const onDone = useCallback(
+    (key: string) => {
+      const next = new Set(doneKeysRef.current).add(key);
+      doneKeysRef.current = next;
+      setDoneKeys(next);
+      const id = agent.session?.sessionId ?? initial?.id;
+      if (id) save({ id, events: agent.events, session: agent.session });
+    },
+    [agent, initial?.id, save],
+  );
 
   // Registration, not saving: the id is what makes the conversation reachable again, and
   // it exists from the first turn's start — long before that turn ends. Keyed on the id

@@ -38,6 +38,16 @@ export interface ChatRecord {
   title: string;
   events: readonly MessageStreamEvent[];
   session?: ClientSessionState;
+  /**
+   * Checkout keys already paid in this conversation.
+   *
+   * Travels WITH the transcript because it is the other half of the same answer. The
+   * transcript proves a checkout finished only once the agent's next order_status lands
+   * after it; in the gap between paying and that tool call, this set is the only proof
+   * there is. Restoring one without the other is what made a resumed chat offer an
+   * already-paid checkout again — and the buyer, trusting it, paid twice.
+   */
+  completed?: readonly string[];
 }
 
 export const HISTORY_KEY = "rail0-starter:eve-chats";
@@ -89,7 +99,17 @@ export function readHistory(storage: StorageLike): ChatRecord[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter(isRecord)
-      .map((chat) => ({ ...chat, savedAt: typeof chat.savedAt === "number" ? chat.savedAt : 0 }))
+      .map((chat) => ({
+        ...chat,
+        savedAt: typeof chat.savedAt === "number" ? chat.savedAt : 0,
+        // Same tolerance as the rest of the read: anything that is not a list of strings
+        // reads as "nothing known to be paid", which is the SAFE direction only because
+        // the transcript still clears a checkout an order followed. It is not safe on its
+        // own, which is why this is written rather than defaulted silently.
+        completed: Array.isArray(chat.completed)
+          ? chat.completed.filter((key): key is string => typeof key === "string")
+          : [],
+      }))
       .sort((a, b) => b.savedAt - a.savedAt)
       .slice(0, MAX_CHATS);
   } catch {

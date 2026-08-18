@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HISTORY_KEY, readHistory, rememberChat, type StorageLike } from "@/lib/chat-history";
 import { type CheckoutEvent, pendingCheckout } from "@/lib/checkout-step";
 
 const none = new Set<string>();
@@ -54,5 +55,62 @@ describe("pendingCheckout", () => {
 
   it("owes nothing for an empty transcript", () => {
     expect(pendingCheckout([], none)).toBeNull();
+  });
+});
+
+/**
+ * The double purchase of 2026-08-18, pinned end to end.
+ *
+ * A buyer paid, hopped to /merchant to capture, and came back. Resuming restored the
+ * TRANSCRIPT but not the set of checkouts already paid, and the agent's order_status had
+ * not landed yet — so the transcript carried no proof either, the docked box offered the
+ * same checkout again, and the card creates a NEW payment every time it runs. Two
+ * escrows, same tee, 85 seconds apart.
+ *
+ * The set travels with the transcript now; this is the round trip through storage that
+ * proves it, since the fix is worth nothing if the write and the read disagree.
+ */
+describe("a checkout paid before the chat was resumed", () => {
+  const KEY = "checkout:ck_9f2";
+  // The transcript as it stands in that gap: the checkout happened, nothing followed it.
+  const events: CheckoutEvent[] = [{ kind: "checkout", key: KEY }];
+
+  it("is still owed when the completed set does not survive the resume", () => {
+    // The regression itself, kept as a test so the shape cannot come back unnoticed.
+    expect(pendingCheckout(events, new Set())).toEqual({ key: KEY });
+  });
+
+  it("is not owed once the set travels with the transcript", () => {
+    const storage = new Map<string, string>();
+    const store: StorageLike = {
+      getItem: (k) => storage.get(k) ?? null,
+      setItem: (k, v) => void storage.set(k, v),
+      removeItem: (k) => void storage.delete(k),
+    };
+
+    rememberChat(store, {
+      id: "session-1",
+      savedAt: 1,
+      title: "buy me a tee",
+      events: [],
+      completed: [KEY],
+    });
+
+    const [restored] = readHistory(store);
+    expect(pendingCheckout(events, new Set(restored.completed ?? []))).toBeNull();
+  });
+
+  it("reads a record written before the field existed as nothing paid", () => {
+    // Records already in a browser have no `completed`. They must not crash, and the
+    // transcript stays the authority for them — which is the pre-existing behaviour.
+    const storage = new Map<string, string>([
+      [HISTORY_KEY, JSON.stringify([{ id: "old", savedAt: 1, title: "t", events: [] }])],
+    ]);
+    const store: StorageLike = {
+      getItem: (k) => storage.get(k) ?? null,
+      setItem: (k, v) => void storage.set(k, v),
+      removeItem: (k) => void storage.delete(k),
+    };
+    expect(readHistory(store)[0].completed).toEqual([]);
   });
 });
