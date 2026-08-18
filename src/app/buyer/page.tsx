@@ -1,37 +1,29 @@
 "use client";
 
-import type { ClientSessionState, MessageStreamEvent } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
+import {
+  type ChatRecord,
+  chatTitle,
+  forgetChat,
+  readHistory,
+  rememberChat,
+} from "@/lib/chat-history";
 import { type CheckoutEvent, pendingCheckout } from "@/lib/checkout-step";
 import { pickSuggestions } from "@/lib/suggestions";
 import { BudgetChip } from "./budget-chip";
+import { ChatHistoryMenu } from "./chat-history-menu";
 import { asCheckoutOutput, checkoutKey } from "./checkout-card";
 import { CheckoutPanel } from "./checkout-panel";
 import { EveToolView } from "./eve-tool-view";
 import { orderCardOrderId } from "./tool-views";
 import { WalletChip, WalletProvider } from "./wallet";
 
-// Where the conversation is parked while this page is unmounted (a hop to
-// /merchant and back, a reload). The eve session itself is durable on the
-// server; what we save is the resumable cursor plus the rendered event log.
-// sessionStorage, not localStorage: a demo shown to the next person starts clean.
-const TRANSCRIPT_KEY = "rail0-starter:eve-chat";
-
-interface SavedChat {
-  events?: readonly MessageStreamEvent[];
-  session?: ClientSessionState;
-}
-
-function loadSaved(): SavedChat {
-  try {
-    const raw = sessionStorage.getItem(TRANSCRIPT_KEY);
-    return raw ? (JSON.parse(raw) as SavedChat) : {};
-  } catch {
-    return {};
-  }
-}
+// Conversations are kept in localStorage and NONE is resumed automatically — the clean
+// open comes from what the page mounts, not from what the browser threw away (see
+// lib/chat-history). The eve session itself is durable on the server; a record holds the
+// cursor to resume it plus the rendered event log to draw it with.
 
 // useEveAgent reads its session options once, when it creates its store — so the
 // component that calls it can only mount after sessionStorage has been read,
@@ -52,6 +44,14 @@ export default function BuyerPage() {
   // different … session"): a new store reads sessionStorage again, finds it cleared, and
   // gets initialSession: undefined.
   const [epoch, setEpoch] = useState(0);
+  // Which past conversation the mounted chat was opened on, if any. Undefined is the
+  // default and the point: the first open of the tab is always a clean chat, even though
+  // the history below survived the last one.
+  const [resumed, setResumed] = useState<ChatRecord | undefined>(undefined);
+  // The list itself lives HERE, in the component that survives the remount, so resuming
+  // or starting over does not re-read storage and cannot show a stale count.
+  const [history, setHistory] = useState<readonly ChatRecord[]>([]);
+  useEffect(() => setHistory(readHistory(localStorage)), []);
   // Whether this visitor may talk to the agent at all. Undefined until asked, so the
   // page shows neither the chat nor a sign-in form while it does not know — a form
   // that flashes and vanishes reads as a bug.
@@ -84,7 +84,20 @@ export default function BuyerPage() {
   if (!allowed) return <BuyerSignIn onSignedIn={() => setAllowed(true)} />;
   return (
     <WalletProvider>
-      <EveChat key={epoch} onNewConversation={() => setEpoch((e) => e + 1)} />
+      <EveChat
+        key={epoch}
+        initial={resumed}
+        history={history}
+        onHistoryChange={setHistory}
+        onResume={(chat) => {
+          setResumed(chat);
+          setEpoch((e) => e + 1);
+        }}
+        onNewConversation={() => {
+          setResumed(undefined);
+          setEpoch((e) => e + 1);
+        }}
+      />
     </WalletProvider>
   );
 }
@@ -160,9 +173,20 @@ function BuyerSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
-function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
+function EveChat({
+  initial,
+  history,
+  onHistoryChange,
+  onResume,
+  onNewConversation,
+}: {
+  initial?: ChatRecord;
+  history: readonly ChatRecord[];
+  onHistoryChange: (chats: readonly ChatRecord[]) => void;
+  onResume: (chat: ChatRecord) => void;
+  onNewConversation: () => void;
+}) {
   const [input, setInput] = useState("");
-  const [saved] = useState<SavedChat>(loadSaved);
   // Four prompts drawn fresh from the pool on every mount, so the empty chat does not
   // always open with the same four. In a lazy useState initializer, NOT at module
   // scope: module scope evaluates once per page load and would freeze the row for the
@@ -187,19 +211,31 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   // conversation the user asked to leave.
   const discardedRef = useRef(false);
 
+  // The conversation's name in the history list: the first thing the reader asked. Taken
+  // as they send it rather than read back out of the transcript, because onFinish sees a
+  // snapshot and not this component's rendered messages — and a resumed chat keeps the
+  // title it already had rather than being renamed by its next turn.
+  const titleRef = useRef<string | undefined>(initial?.title);
+
   const agent = useEveAgent({
-    initialEvents: saved.events ?? [],
-    initialSession: saved.session,
+    initialEvents: initial?.events ?? [],
+    initialSession: initial?.session,
     onFinish(snapshot) {
       if (discardedRef.current) return;
-      try {
-        sessionStorage.setItem(
-          TRANSCRIPT_KEY,
-          JSON.stringify({ events: snapshot.events, session: snapshot.session }),
-        );
-      } catch {
-        // over quota or unavailable — the durable session on the server survives
-      }
+      // Keyed by the eve session id, so the per-turn save updates one record instead of
+      // filling the list with copies of the chat in progress. No id (a turn that failed
+      // before the session existed) means there is nothing resumable to keep.
+      const id = snapshot.session?.sessionId ?? initial?.id;
+      if (!id) return;
+      onHistoryChange(
+        rememberChat(localStorage, {
+          id,
+          savedAt: Date.now(),
+          title: chatTitle(titleRef.current),
+          events: snapshot.events,
+          session: snapshot.session,
+        }),
+      );
     },
   });
 
@@ -239,6 +275,7 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
   // address nor a way to be wrong about it.
   const sendText = (text: string) => {
     followStream();
+    titleRef.current ??= text;
     void agent.send(text);
   };
 
@@ -288,11 +325,9 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
       });
     }
     agent.stop();
-    try {
-      sessionStorage.removeItem(TRANSCRIPT_KEY);
-    } catch {
-      // nothing to clear
-    }
+    // Nothing is deleted here any more. Leaving a conversation used to erase it, which is
+    // how "start clean" and "keep my chats" ended up mutually exclusive; the fresh chat
+    // now comes from remounting on no record, and this one stays in the list.
     onNewConversation();
   };
 
@@ -366,7 +401,21 @@ function EveChat({ onNewConversation }: { onNewConversation: () => void }) {
             without being given a card". Left of the wallet on purpose: it is about the
             wallet's ALLOWANCE, and it is the more interesting of the two. */}
         <BudgetChip />
-        <WalletChip />
+        {/* ml-auto and not justify-between alone: the budget chip renders nothing when the
+            deployment has no wallet of its own, and this group then drifted to the left
+            edge — taking its right-anchored menu off-screen with it. */}
+        <div className="ml-auto flex items-center gap-2">
+          {/* The way back into a conversation this page deliberately did not open on. In
+              the header and not in the footer beside "New conversation": the footer only
+              exists once there are messages, and the empty chat is exactly where you
+              realise you wanted the previous one. */}
+          <ChatHistoryMenu
+            chats={history}
+            onResume={onResume}
+            onForget={(id) => onHistoryChange(forgetChat(localStorage, id))}
+          />
+          <WalletChip />
+        </div>
       </div>
       <div ref={scrollerRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
         {agent.data.messages.length === 0 && (

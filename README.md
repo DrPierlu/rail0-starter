@@ -132,6 +132,15 @@ a rail0 gateway to talk to, and an Anthropic API key.
    the same port it binds. Left to drift, the agent's shop calls landed on
    rail0-admin, which answers them.
 
+**The buyer's chat opens clean, and remembers.** Conversations are kept in
+`localStorage` (the last 5 — see [`src/lib/chat-history.ts`](src/lib/chat-history.ts)),
+but none is resumed on load: the fresh chat comes from what the page mounts, not from
+throwing the history away, so a demo handed to the next person never starts mid-sentence
+in someone else's cart. **Past chats** in the chat header lists them, newest first, and
+resuming one remounts the chat on that eve session — the conversation itself is durable
+on the eve server, so a resumed chat continues rather than replays. Nothing is stored
+server-side; `×` forgets one.
+
 **What the server logs.** Next's per-request log is silenced for the three polled
 routes (the order list, an order's detail, the budget chip) — visible-tab polling made
 it hundreds of identical `GET /api/shop/orders 200 in 24ms` lines, which is the one
