@@ -1,5 +1,6 @@
 import { checksumAddress, type Eip3009Signature, Rail0Client } from "@rail0/sdk";
 import { env } from "./env";
+import { logEvent, short } from "./log";
 
 // Two server-side roles, and neither is a human buyer: a person signs in their own
 // wallet and their session is stashed with the checkout, not cached here.
@@ -56,6 +57,10 @@ export async function clientFor(role: Role): Promise<Rail0Client> {
   const domain = new URL(env().GATEWAY_URL).host;
   const auth = await client.auth.login(privateKeyFor(role), domain, env().SIWE_CHAIN_ID);
   client.setAuthToken(auth.token);
+  // One line per SIWE login, which is once per role per 8 hours — unless it is not, and
+  // a log full of them is the symptom of a session cache that is not caching (a serverless
+  // instance per request, a clock skew making every JWT look expired).
+  logEvent("siwe login", { role, address: short(auth.address), expires: auth.expiresAt });
   sessions[role] = {
     client,
     address: auth.address,
