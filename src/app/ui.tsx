@@ -10,6 +10,7 @@ import {
   waitExplainer,
 } from "@/lib/order-ui";
 import type { OrderState } from "@/lib/order-view";
+import { ChainLogo, hasChainLogo } from "./chain-logos";
 
 // Small client-side pieces shared by the buyer chat and the merchant page.
 
@@ -116,39 +117,14 @@ export function EscrowTrail({
 }
 
 /**
- * A chain's mark: its own colour, and two letters standing in for its logo.
+ * The lettered dot a chain gets when this app has no logo for it.
  *
- * Letters and not the brands' own artwork, deliberately. A template that ships five
- * companies' logos ships five trademark questions with them, and an icon in a demo is
- * not worth that — the colour is what the eye actually sorts a list by, and it needs no
- * permission. Swap these for the real marks in your own deployment if you have the right
- * to; the shape of this map is the seam for it.
- *
- * Keyed by chain id rather than name, because the name is the gateway's label and can be
- * edited in seeds without anything here noticing.
+ * Initials from the words of its name ("Foo Sepolia" → FS), in neutral grey. A chain
+ * arrives by a seeds edit in the gateway, not by a release of this app, so an unknown
+ * chain is the normal path and not an error — and a hole in a column of marks reads as a
+ * rendering failure, which is worse than a plain dot.
  */
-const CHAIN_MARKS: Record<number, { initials: string; className: string }> = {
-  5042002: { initials: "AR", className: "bg-[#0a5aff] text-white" }, // Arc Testnet
-  84532: { initials: "BA", className: "bg-[#0052ff] text-white" }, // Base Sepolia
-  11155420: { initials: "OP", className: "bg-[#ff0420] text-white" }, // Optimism Sepolia
-  421614: { initials: "AB", className: "bg-[#12aaff] text-white" }, // Arbitrum Sepolia
-  80002: { initials: "PO", className: "bg-[#8247e5] text-white" }, // Polygon Amoy
-};
-
-/**
- * The mark to draw for a chain, known or not.
- *
- * A chain missing from the map still gets one, in neutral grey with initials from the
- * words of its name ("Foo Sepolia" → FS): a hole in a column of coloured dots reads as a
- * rendering failure, which is worse than a plain dot. New chains arrive by a seeds edit in
- * the gateway, not by a release of this app, so that path is the normal one.
- */
-export function chainMark(
-  chainId: number | undefined,
-  label: string,
-): { initials: string; className: string } {
-  const known = chainId === undefined ? undefined : CHAIN_MARKS[chainId];
-  if (known) return known;
+export function chainMark(label: string): { initials: string; className: string } {
   const words = label.trim().split(/\s+/).filter(Boolean);
   const initials =
     words.length === 0
@@ -169,23 +145,31 @@ export function chainMark(
  * `chain_id` there.
  *
  * The mark carries the same information as the label, one glance earlier: down a list of
- * orders on two chains, colour separates them without reading a word. The label stays —
- * "Base Sepolia" and "Base" are not the same chain, and no dot can say which one this is.
+ * orders on two chains, the logo separates them without reading a word. The label stays —
+ * "Base Sepolia" and "Base" are not the same chain, and no mark can say which one this is.
+ *
+ * The chain's own logo where there is one (chain-logos.tsx), a lettered dot where there is
+ * not. Both occupy the same 16px box, so a list mixing them still lines up.
  */
 export function ChainChip({ chainId, name }: { chainId?: number; name?: string }) {
   const label = name ?? (chainId === undefined ? undefined : `chain ${chainId}`);
   if (!label) return null;
-  const mark = chainMark(chainId, label);
+  const logo = hasChainLogo(chainId);
+  const mark = chainMark(label);
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-500/10 py-0.5 pr-2 pl-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
-      {/* aria-hidden: the label right beside it says the same thing, and a screen reader
-          reading "AR Arc Testnet" is worse than one reading "Arc Testnet". */}
-      <span
-        aria-hidden="true"
-        className={`inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold leading-none tracking-tight ${mark.className}`}
-      >
-        {mark.initials}
-      </span>
+      {/* The mark is decorative here: the label right beside it says the same thing, and a
+          screen reader reading "AR Arc Testnet" is worse than one reading "Arc Testnet". */}
+      {logo ? (
+        <ChainLogo chainId={chainId} className="size-4 shrink-0" />
+      ) : (
+        <span
+          aria-hidden="true"
+          className={`inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold leading-none tracking-tight ${mark.className}`}
+        >
+          {mark.initials}
+        </span>
+      )}
       {label}
     </span>
   );
