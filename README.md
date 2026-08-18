@@ -143,9 +143,10 @@ server-side; `×` forgets one.
 
 **What the server logs.** Next's per-request log is silenced for the polled routes (the
 order list, an order's detail, the budget chip, the chat's session probe) and for the two
-page paths themselves — in dev those are re-fetched on every recompile — visible-tab polling made
-it hundreds of identical `GET /api/shop/orders 200 in 24ms` lines, which is the one
-shape of line that never carries information. Everything else still logs its status,
+page paths themselves. Visible-tab polling made hundreds of identical
+`GET /api/shop/orders 200 in 24ms` lines — the one shape of line that never carries
+information — and in dev the pages are re-fetched on every recompile, so editing a
+component printed them dozens of times more. Everything else still logs its status,
 and [`src/lib/log.ts`](src/lib/log.ts) adds one line per gateway operation instead:
 
 ```
