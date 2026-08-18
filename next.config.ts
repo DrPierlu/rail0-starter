@@ -16,6 +16,13 @@ const nextConfig: NextConfig = {
         /^\/api\/shop\/orders(\?|$)/,
         /^\/api\/shop\/orders\/[^/?]+(\?|$)/,
         /^\/api\/buyer\/budget(\?|$)/,
+        // The chat asks this on every mount, and every HMR recompile is a mount.
+        /^\/api\/buyer\/session(\?|$)/,
+        // The two pages themselves. In dev they are re-fetched on every recompile, so a
+        // session of editing prints them dozens of times; what is worth reading there is
+        // the compile line and the rail0 operation lines, not that a page rendered again.
+        // Only these two exact paths — a 404 on a mistyped route still logs.
+        /^\/(buyer|merchant)(\?|$)/,
       ],
     },
   },

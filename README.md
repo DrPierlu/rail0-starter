@@ -141,8 +141,9 @@ resuming one remounts the chat on that eve session — the conversation itself i
 on the eve server, so a resumed chat continues rather than replays. Nothing is stored
 server-side; `×` forgets one.
 
-**What the server logs.** Next's per-request log is silenced for the three polled
-routes (the order list, an order's detail, the budget chip) — visible-tab polling made
+**What the server logs.** Next's per-request log is silenced for the polled routes (the
+order list, an order's detail, the budget chip, the chat's session probe) and for the two
+page paths themselves — in dev those are re-fetched on every recompile — visible-tab polling made
 it hundreds of identical `GET /api/shop/orders 200 in 24ms` lines, which is the one
 shape of line that never carries information. Everything else still logs its status,
 and [`src/lib/log.ts`](src/lib/log.ts) adds one line per gateway operation instead:
