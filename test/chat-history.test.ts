@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   type ChatRecord,
+  CURRENT_KEY,
   chatTitle,
   clearCurrentChatId,
-  CURRENT_KEY,
   forgetChat,
   HISTORY_KEY,
   MAX_CHATS,
@@ -11,8 +11,8 @@ import {
   readHistory,
   relativeTime,
   rememberChat,
-  setCurrentChatId,
   type StorageLike,
+  setCurrentChatId,
 } from "@/lib/chat-history";
 
 /**
