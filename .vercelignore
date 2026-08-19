@@ -1,0 +1,30 @@
+# What NOT to upload when deploying. Vercel falls back to .gitignore when this
+# file is absent, and that fallback is what bit us: the first deploy tried to
+# send 23.3MB across more than 5000 files and was refused by the free plan's
+# upload limit ("more than 5000, code: api-upload-free"), even though git tracks
+# only 126 files totalling well under a megabyte.
+#
+# The two culprits are build/dev artifacts git ignores but the upload picked up
+# anyway — .eve/ alone is 12,775 files. Naming them here removes the ambiguity;
+# the source that actually gets deployed is small enough to upload as one archive.
+
+# Dependencies and build output — Vercel installs and builds these itself.
+node_modules
+.next
+out
+
+# eve's LOCAL build cache. The agent is built on Vercel by the service's own
+# build command, which WRITES into .eve/vercel-services/… — it is an output
+# directory, never an input, so shipping a local copy is pure upload cost.
+.eve
+
+# Local-only state and tooling.
+.data
+.vercel
+.git
+
+# Env files. Vercel injects the project's environment variables; a local .env
+# would silently shadow them with whatever this machine happens to have.
+.env
+.env.local
+.env*.local
