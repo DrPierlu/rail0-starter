@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     // This WAS the only route without the catch — and, via addressFor → env(),
-    // the first place a missing SELLER_PRIVATE_KEY surfaced. list_products is
+    // the first place a missing MERCHANT_PRIVATE_KEY surfaced. list_products is
     // the first tool call of virtually every conversation, so the un-caught
     // ZodError turned into a bare non-JSON 500 and the new user's very first
     // error read `Unexpected token 'I', "Internal S"... is not valid JSON`

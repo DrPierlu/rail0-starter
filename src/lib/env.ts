@@ -10,9 +10,9 @@ import { z } from "zod";
 export class ConfigError extends Error {}
 
 const schema = z.object({
-  GATEWAY_URL: z.string().url().default("http://localhost:9292"),
-  SELLER_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/, {
-    message: "SELLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex key",
+  RAIL0_GATEWAY_URL: z.string().url().default("http://localhost:9292"),
+  MERCHANT_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/, {
+    message: "MERCHANT_PRIVATE_KEY must be a 0x-prefixed 32-byte hex key",
   }),
   // The AGENT'S wallet: set it and this deployment's agent can buy on its own,
   // up to BUYER_MAX_ORDER. Unset, the buyer is a person with MetaMask and the
@@ -61,8 +61,8 @@ let cached: Env | null = null;
 export function env(): Env {
   if (!cached) {
     const parsed = schema.safeParse({
-      GATEWAY_URL: process.env.GATEWAY_URL || undefined,
-      SELLER_PRIVATE_KEY: process.env.SELLER_PRIVATE_KEY,
+      RAIL0_GATEWAY_URL: process.env.RAIL0_GATEWAY_URL || undefined,
+      MERCHANT_PRIVATE_KEY: process.env.MERCHANT_PRIVATE_KEY,
       BUYER_PRIVATE_KEY: process.env.BUYER_PRIVATE_KEY || undefined,
       BUYER_MAX_ORDER: process.env.BUYER_MAX_ORDER || undefined,
       BUYER_MAX_WINDOW: process.env.BUYER_MAX_WINDOW || undefined,

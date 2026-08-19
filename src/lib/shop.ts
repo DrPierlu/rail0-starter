@@ -324,7 +324,7 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
   await seller.payments.authorize(rail0Id, {
     signed_transaction: signTransaction(
       prep.unsigned_transaction,
-      env().SELLER_PRIVATE_KEY as `0x${string}`,
+      env().MERCHANT_PRIVATE_KEY as `0x${string}`,
     ),
   });
 
@@ -352,7 +352,7 @@ export async function captureOrder(rail0Id: string): Promise<Order> {
   await seller.payments.capture(rail0Id, {
     signed_transaction: signTransaction(
       prep.unsigned_transaction,
-      env().SELLER_PRIVATE_KEY as `0x${string}`,
+      env().MERCHANT_PRIVATE_KEY as `0x${string}`,
     ),
   });
   const captured = await reread(rail0Id, undefined, order.token);
@@ -376,7 +376,7 @@ export async function voidOrder(rail0Id: string): Promise<Order> {
   await seller.payments.void(rail0Id, {
     signed_transaction: signTransaction(
       prep.unsigned_transaction,
-      env().SELLER_PRIVATE_KEY as `0x${string}`,
+      env().MERCHANT_PRIVATE_KEY as `0x${string}`,
     ),
   });
   const voided = await reread(rail0Id, undefined, order.token);

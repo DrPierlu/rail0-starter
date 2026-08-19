@@ -28,7 +28,7 @@ if (!globalSessions.__rail0Sessions) {
 const sessions = globalSessions.__rail0Sessions;
 
 function privateKeyFor(role: Role): string {
-  if (role === "seller") return env().SELLER_PRIVATE_KEY;
+  if (role === "seller") return env().MERCHANT_PRIVATE_KEY;
   const key = env().BUYER_PRIVATE_KEY;
   // Callers reach the agent role only after checking it exists; this is the guard for
   // the path that forgets to, and it says which switch is off rather than failing as
@@ -53,8 +53,8 @@ export async function clientFor(role: Role): Promise<Rail0Client> {
     return existing.client;
   }
 
-  const client = existing?.client ?? new Rail0Client({ baseUrl: env().GATEWAY_URL });
-  const domain = new URL(env().GATEWAY_URL).host;
+  const client = existing?.client ?? new Rail0Client({ baseUrl: env().RAIL0_GATEWAY_URL });
+  const domain = new URL(env().RAIL0_GATEWAY_URL).host;
   const auth = await client.auth.login(privateKeyFor(role), domain, env().SIWE_CHAIN_ID);
   client.setAuthToken(auth.token);
   // One line per SIWE login, which is once per role per 8 hours — unless it is not, and

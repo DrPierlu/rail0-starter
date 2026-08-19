@@ -8,10 +8,10 @@ import { ShopError } from "./shop";
 // merchant panel and the agent showed verbatim — is the single most likely
 // first-run failure (no gateway running) and says nothing actionable.
 function gatewayUnreachableMessage(): string {
-  const url = process.env.GATEWAY_URL || "http://localhost:9292";
+  const url = process.env.RAIL0_GATEWAY_URL || "http://localhost:9292";
   return (
     `rail0 gateway unreachable at ${url} — ` +
-    "start it (bin/dev in rail0-gateway) or point GATEWAY_URL at a deployed gateway"
+    "start it (bin/dev in rail0-gateway) or point RAIL0_GATEWAY_URL at a deployed gateway"
   );
 }
 

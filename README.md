@@ -76,7 +76,7 @@ Prerequisites: **Node 24+** (enforced via `engines`; `.nvmrc` provided), pnpm,
 a rail0 gateway to talk to, and an Anthropic API key.
 
 1. **Gateway.** Run the rail0 dev stack (`bin/dev` in `rail0-gateway` — API on
-   `http://localhost:9292`), or point `GATEWAY_URL` at a deployed gateway.
+   `http://localhost:9292`), or point `RAIL0_GATEWAY_URL` at a deployed gateway.
 
 2. **Wallets.**
    - The **buyer** wallet connects in the browser at checkout (MetaMask). Set
@@ -87,7 +87,7 @@ a rail0 gateway to talk to, and an Anthropic API key.
    - The **seller** wallet must be registered as a payee wallet on the
      gateway, with the stablecoins it accepts activated, and needs native gas
      for authorize/capture/void transactions. Its key goes in
-     `SELLER_PRIVATE_KEY`.
+     `MERCHANT_PRIVATE_KEY`.
    - With the local dev stack, the seeded integration wallets work out of the
      box: the gateway's `config/seeds.yml` documents the test merchants, and
      the sibling `rail0-test/.env` (if you have it) carries usable keys.
@@ -98,7 +98,7 @@ a rail0 gateway to talk to, and an Anthropic API key.
    cp .env.example .env.local
    ```
 
-   Fill in `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY` and `MERCHANT_TOKEN`
+   Fill in `MERCHANT_PRIVATE_KEY`, `ANTHROPIC_API_KEY` and `MERCHANT_TOKEN`
    (`openssl rand -hex 32`) — that's all a local run requires. Every variable
    the app reads is listed and commented in [`.env.example`](.env.example); note
    `SHOP_URL` if you run the app on a non-default port.
@@ -299,8 +299,8 @@ Manual equivalent, and what to set up once:
 
 1. Push the repo to GitHub and import it in Vercel (the SDK tarball in
    `vendor/` makes the install self-contained).
-2. Set the environment variables: `GATEWAY_URL` (a deployed rail0 gateway),
-   `SELLER_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` and `BUYER_TOKEN`
+2. Set the environment variables: `RAIL0_GATEWAY_URL` (a deployed rail0 gateway),
+   `MERCHANT_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` and `BUYER_TOKEN`
    (without those two the deployed `/merchant` and the chat refuse every request —
    they fail closed, which on a public URL is the only safe default).
 3. Make sure the seller wallet is registered as a payee on that gateway with

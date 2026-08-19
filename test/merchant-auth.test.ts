@@ -6,7 +6,7 @@ import { merchantToken, tokenMatches } from "@/lib/merchant-auth";
 // test body runs. MERCHANT_TOKEN is deliberately left UNSET: the fail-closed
 // assertion below is the one that matters most, and the cache means a file cannot
 // see it both ways.
-process.env.SELLER_PRIVATE_KEY = `0x${"11".repeat(32)}`;
+process.env.MERCHANT_PRIVATE_KEY = `0x${"11".repeat(32)}`;
 delete process.env.MERCHANT_TOKEN;
 
 describe("tokenMatches", () => {

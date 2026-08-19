@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 if [ ! -f .env.local ]; then
   cp .env.example .env.local
   echo "Created .env.local from .env.example."
-  echo "Fill in SELLER_PRIVATE_KEY, ANTHROPIC_API_KEY and MERCHANT_TOKEN, then run bin/dev again."
+  echo "Fill in MERCHANT_PRIVATE_KEY, ANTHROPIC_API_KEY and MERCHANT_TOKEN, then run bin/dev again."
   exit 1
 fi
 
@@ -19,7 +19,7 @@ fi
 # preflight and moved the failure to the first request — which is the one place
 # this check exists to prevent.
 missing=""
-for key in SELLER_PRIVATE_KEY ANTHROPIC_API_KEY MERCHANT_TOKEN; do
+for key in MERCHANT_PRIVATE_KEY ANTHROPIC_API_KEY MERCHANT_TOKEN; do
   value=$(grep -E "^${key}=" .env.local | head -1 | cut -d= -f2- || true)
   # Strip surrounding whitespace so a "KEY= " line reads as unset.
   if [ -z "$(printf '%s' "$value" | tr -d '[:space:]')" ]; then
@@ -37,7 +37,7 @@ if [ ! -d node_modules ]; then
   pnpm install
 fi
 
-gateway_url=$(grep -E '^GATEWAY_URL=' .env.local | cut -d= -f2-)
+gateway_url=$(grep -E '^RAIL0_GATEWAY_URL=' .env.local | cut -d= -f2-)
 gateway_url=${gateway_url:-http://localhost:9292}
 if ! curl -sf -m 3 "$gateway_url/health" > /dev/null 2>&1; then
   echo "warning: no rail0 gateway answering at $gateway_url"

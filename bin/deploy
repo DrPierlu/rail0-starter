@@ -64,7 +64,7 @@ pnpm test >/dev/null 2>&1 || problem "pnpm test failed"
 # else, so this variable is invisible until the moment it is deployed — and its absence
 # then costs a chat that answers 401 to every message, with nothing upstream having
 # complained. That asymmetry is exactly what a deploy preflight is for.
-required=(ANTHROPIC_API_KEY SELLER_PRIVATE_KEY GATEWAY_URL MERCHANT_TOKEN BUYER_TOKEN)
+required=(ANTHROPIC_API_KEY MERCHANT_PRIVATE_KEY RAIL0_GATEWAY_URL MERCHANT_TOKEN BUYER_TOKEN)
 if command -v vercel >/dev/null 2>&1; then
   echo "==> reading the project's production environment ..."
   env_list=$(vercel env ls production 2>/dev/null || true)

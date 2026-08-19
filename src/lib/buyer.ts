@@ -112,7 +112,7 @@ export function getShop(base: string) {
 // A bare (unauthenticated) gateway client: enough for the SIWE nonce, and the
 // carrier for auth.verify. One per call — no shared session state to corrupt.
 function bareClient(): Rail0Client {
-  return new Rail0Client({ baseUrl: env().GATEWAY_URL });
+  return new Rail0Client({ baseUrl: env().RAIL0_GATEWAY_URL });
 }
 
 /**
@@ -131,7 +131,7 @@ function bareClient(): Rail0Client {
  * minted the nonce — is what decides whether the pair is good.
  */
 export async function siweChallenge(buyerAddress: string): Promise<string> {
-  const gateway = env().GATEWAY_URL;
+  const gateway = env().RAIL0_GATEWAY_URL;
   const { nonce } = await bareClient().auth.getNonce();
   return buildSiweMessage({
     // hostname, NOT host: the gateway's SIWE domain allow-list holds bare hosts
