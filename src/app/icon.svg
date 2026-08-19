@@ -10,22 +10,24 @@
     rather than as an unrelated app. What is added is the fill: the hexagon is a
     CONTAINER holding value, which is what a rail0 payment literally is — funds sit
     in escrow between authorize and capture, held by the contract and owned by
-    neither side yet. Half full, because half is the state the whole app is about;
-    empty or full would both be the moment after.
-
-    Two readings, and both are true of this repo: value held in escrow, and a
+    neither side yet. It reads a second way that is equally true of this repo: a
     template you are half-given and expected to finish.
 
-    The fill line rises 6° to the right instead of sitting flat. That is the only
-    decorative decision here, and it earns its place twice: it echoes the diagonal
-    strokes inside the parent logo, and it keeps the mark from reading as a static
-    two-tone shape. Steeper (10°+) starts to look like a tilted liquid; flat looks
-    like an accident of cropping.
+    THE DIVIDING LINE RUNS VERTEX TO VERTEX — lower-left corner to upper-right
+    corner — and that is the whole reason it looks intentional. An arbitrary height
+    is a number someone picked; a line that lands exactly on two corners is a
+    property of the shape, and stays right at any size without being re-tuned.
+
+    The direction is not free either: it rises to the right because the diagonal
+    strokes inside the parent logo do. Run the other way (upper-left to lower-right)
+    and the mark still works but stops rhyming with rail0, which is most of what it
+    is here to do. The resulting ~30° is what the geometry dictates, not a taste.
 
     Sized and tested down to 16px, which is where a favicon actually lives. Anything
-    finer than one solid mass plus the outline turns to mud at that size — earlier
-    drafts with interior strokes, arrows and a bag handle all failed there, which is
-    why the meaning is carried by the fill and not by a symbol inside it.
+    finer than one solid mass plus the outline turns to mud there — drafts with
+    interior strokes, arrows, facing chevrons and a bag handle were all rendered and
+    failed at that size, which is why the meaning is carried by the fill and not by
+    a symbol inside the hexagon.
 
     Two colour sets: browsers honour prefers-color-scheme inside an SVG favicon, and
     a near-black mark is invisible on a dark tab strip.
@@ -43,6 +45,6 @@
       <path d="M12 3.4 19.5 7.7v8.6L12 20.6 4.5 16.3V7.7Z" />
     </clipPath>
   </defs>
-  <path class="ink" d="M0 13.3 24 10.7V24H0Z" clip-path="url(#hex)" />
+  <path class="ink" d="M4.5 16.3 19.5 7.7v8.6L12 20.6Z" clip-path="url(#hex)" />
   <path class="line" d="M12 3.4 19.5 7.7v8.6L12 20.6 4.5 16.3V7.7Z" />
 </svg>
