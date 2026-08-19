@@ -1,18 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000" role="img" aria-label="Vercel">
-  <title>Vercel</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="rail0 starter">
+  <title>rail0 starter</title>
   <!--
-    The tab icon. Without one the browser shows its generic globe, which is what this
-    replaces.
+    The tab icon, and the shop's mark.
 
-    The Vercel triangle, at the canonical 1155x1000 viewBox so the mark keeps its own
-    proportions rather than being stretched into a square.
+    It replaces the Vercel triangle this template shipped with — a placeholder that
+    said "made from a Next.js starter" where the icon should say what the thing is.
 
-    Two fills: browsers honour prefers-color-scheme inside an SVG favicon, and the
-    triangle is a solid shape — black on a dark tab strip is an invisible icon.
+    The shape is rail0's own hexagon, so the storefront reads as part of that family
+    rather than as an unrelated app. What is added is the fill: the hexagon is a
+    CONTAINER holding value, which is what a rail0 payment literally is — funds sit
+    in escrow between authorize and capture, held by the contract and owned by
+    neither side yet. Half full, because half is the state the whole app is about;
+    empty or full would both be the moment after.
+
+    Two readings, and both are true of this repo: value held in escrow, and a
+    template you are half-given and expected to finish.
+
+    The fill line rises 6° to the right instead of sitting flat. That is the only
+    decorative decision here, and it earns its place twice: it echoes the diagonal
+    strokes inside the parent logo, and it keeps the mark from reading as a static
+    two-tone shape. Steeper (10°+) starts to look like a tilted liquid; flat looks
+    like an accident of cropping.
+
+    Sized and tested down to 16px, which is where a favicon actually lives. Anything
+    finer than one solid mass plus the outline turns to mud at that size — earlier
+    drafts with interior strokes, arrows and a bag handle all failed there, which is
+    why the meaning is carried by the fill and not by a symbol inside it.
+
+    Two colour sets: browsers honour prefers-color-scheme inside an SVG favicon, and
+    a near-black mark is invisible on a dark tab strip.
   -->
   <style>
-    path { fill: #0a0a0a; }
-    @media (prefers-color-scheme: dark) { path { fill: #fafafa; } }
+    .ink { fill: #0a0a0a; }
+    .line { fill: none; stroke: #0a0a0a; stroke-width: 1.7; stroke-linejoin: round; }
+    @media (prefers-color-scheme: dark) {
+      .ink { fill: #fafafa; }
+      .line { stroke: #fafafa; }
+    }
   </style>
-  <path d="m577.3 0 577.4 1000H0z" />
+  <defs>
+    <clipPath id="hex">
+      <path d="M12 3.4 19.5 7.7v8.6L12 20.6 4.5 16.3V7.7Z" />
+    </clipPath>
+  </defs>
+  <path class="ink" d="M0 13.3 24 10.7V24H0Z" clip-path="url(#hex)" />
+  <path class="line" d="M12 3.4 19.5 7.7v8.6L12 20.6 4.5 16.3V7.7Z" />
 </svg>
