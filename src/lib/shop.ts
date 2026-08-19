@@ -38,10 +38,10 @@ export interface PaymentMethod {
  * what the merchant accepts is configured on the gateway, not in this repo.
  */
 export async function listPaymentMethods(): Promise<PaymentMethod[]> {
-  const seller = await clientFor("seller");
+  const merchant = await clientFor("merchant");
   const [wallets, chains] = await Promise.all([
-    seller.paymentMethods.list({ address: addressFor("seller") }),
-    seller.chains.list(),
+    merchant.paymentMethods.list({ address: addressFor("merchant") }),
+    merchant.chains.list(),
   ]);
   const chainNames = new Map(chains.map((c) => [c.chain_id ?? 0, c.name ?? ""]));
   const methods: PaymentMethod[] = [];
@@ -80,8 +80,8 @@ export async function listPaymentMethods(): Promise<PaymentMethod[]> {
  * One read, shared by the single-order and the order-book paths, so neither pays per row.
  */
 async function tokenCatalog(): Promise<Map<string, OrderToken>> {
-  const seller = await clientFor("seller");
-  const [tokens, chains] = await Promise.all([seller.tokens.list(), seller.chains.list()]);
+  const merchant = await clientFor("merchant");
+  const [tokens, chains] = await Promise.all([merchant.tokens.list(), merchant.chains.list()]);
   const chainNames = new Map(chains.map((c) => [c.chain_id ?? 0, c.name ?? ""]));
   const byKey = new Map<string, OrderToken>();
   for (const token of tokens) {
@@ -143,7 +143,7 @@ export async function quoteFor(
   const token = await tokenFor(chainId, tokenAddress);
   if (!token) throw new ShopError(422, "merchant does not accept this chain/token pair");
   try {
-    return { ...quote(items, token.decimals), token, payee: addressFor("seller") };
+    return { ...quote(items, token.decimals), token, payee: addressFor("merchant") };
   } catch (error) {
     if (error instanceof QuoteError) throw new ShopError(422, error.message);
     throw error;
@@ -152,8 +152,8 @@ export async function quoteFor(
 
 /** One order, by its rail0 payment id. Undefined when the gateway has no such payment. */
 export async function readOrder(rail0Id: string): Promise<Order | undefined> {
-  const seller = await clientFor("seller");
-  const payment = await seller.payments.get(rail0Id).catch(() => undefined);
+  const merchant = await clientFor("merchant");
+  const payment = await merchant.payments.get(rail0Id).catch(() => undefined);
   if (!payment) return undefined;
   const token = await tokenFor(payment.chain_id, payment.token);
   if (!token) return undefined;
@@ -215,9 +215,9 @@ function priceCheckFor(order: Order): PriceCheck {
 export async function readOrders(
   limit = 50,
 ): Promise<{ orders: Order[]; total: number; unresolved: number }> {
-  const seller = await clientFor("seller");
-  const page = await seller.payments.list({
-    payee: addressFor("seller"),
+  const merchant = await clientFor("merchant");
+  const page = await merchant.payments.list({
+    payee: addressFor("merchant"),
     sort: "-created_at",
     per_page: limit,
   });
@@ -265,10 +265,10 @@ export async function readOrders(
  */
 export async function authorizePayment(rail0Id: string): Promise<Order> {
   const op = startOp("authorize", { payment: short(rail0Id) });
-  const seller = await clientFor("seller");
-  const payment = await seller.payments.get(rail0Id);
+  const merchant = await clientFor("merchant");
+  const payment = await merchant.payments.get(rail0Id);
 
-  if (payment.payee.toLowerCase() !== addressFor("seller").toLowerCase()) {
+  if (payment.payee.toLowerCase() !== addressFor("merchant").toLowerCase()) {
     // Logged rather than only returned: a payment addressed to someone else arriving at
     // this merchant's authorize is the one refusal here that is interesting on its own.
     logEvent("authorize refused", {
@@ -317,11 +317,11 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
     return known;
   }
 
-  const prep = await seller.payments.authorizePrepare(rail0Id);
+  const prep = await merchant.payments.authorizePrepare(rail0Id);
   if (!prep.unsigned_transaction) {
     throw new ShopError(502, "gateway returned no unsigned authorize transaction");
   }
-  await seller.payments.authorize(rail0Id, {
+  await merchant.payments.authorize(rail0Id, {
     signed_transaction: signTransaction(
       prep.unsigned_transaction,
       env().MERCHANT_PRIVATE_KEY as `0x${string}`,
@@ -337,19 +337,19 @@ export async function authorizePayment(rail0Id: string): Promise<Order> {
 export async function captureOrder(rail0Id: string): Promise<Order> {
   const op = startOp("capture", { payment: short(rail0Id) });
   const order = await requireOrderInState(rail0Id, "in_escrow");
-  const seller = await clientFor("seller");
+  const merchant = await clientFor("merchant");
   // capture/refund prepare, like create, take the HUMAN decimal amount — the WHOLE of
   // it, converted from base units here rather than reusing `order.total`. That field is
   // rounded to two places for people to read, and capturing a rounded figure would
   // either leave dust in escrow or ask for more than is there.
-  const prep = await seller.payments.capturePrepare(
+  const prep = await merchant.payments.capturePrepare(
     rail0Id,
     exactAmount(order.total_base, order.token.decimals),
   );
   if (!prep.unsigned_transaction) {
     throw new ShopError(502, "gateway returned no unsigned capture transaction");
   }
-  await seller.payments.capture(rail0Id, {
+  await merchant.payments.capture(rail0Id, {
     signed_transaction: signTransaction(
       prep.unsigned_transaction,
       env().MERCHANT_PRIVATE_KEY as `0x${string}`,
@@ -368,12 +368,12 @@ export async function captureOrder(rail0Id: string): Promise<Order> {
 export async function voidOrder(rail0Id: string): Promise<Order> {
   const op = startOp("void", { payment: short(rail0Id) });
   const order = await requireOrderInState(rail0Id, "in_escrow");
-  const seller = await clientFor("seller");
-  const prep = await seller.payments.voidPrepare(rail0Id);
+  const merchant = await clientFor("merchant");
+  const prep = await merchant.payments.voidPrepare(rail0Id);
   if (!prep.unsigned_transaction) {
     throw new ShopError(502, "gateway returned no unsigned void transaction");
   }
-  await seller.payments.void(rail0Id, {
+  await merchant.payments.void(rail0Id, {
     signed_transaction: signTransaction(
       prep.unsigned_transaction,
       env().MERCHANT_PRIVATE_KEY as `0x${string}`,

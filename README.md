@@ -50,7 +50,7 @@ nothing the agent could rewrite. The agent's channel
 over-ceiling spend is answered over that channel, so it is gated on `BUYER_TOKEN`
 everywhere except a local dev server.
 
-The seller key is server-side by design: that is the merchant's own backend
+The merchant key is server-side by design: that is the merchant's own backend
 signing its own transactions.
 
 ## The flow
@@ -84,7 +84,7 @@ a rail0 gateway to talk to, and an Anthropic API key.
      buys as itself, within the ceilings above. Either way it needs the payment
      stablecoin (e.g. USDC) on the target testnet — EIP-3009 transfers are
      gasless for the buyer.
-   - The **seller** wallet must be registered as a payee wallet on the
+   - The **merchant** wallet must be registered as a payee wallet on the
      gateway, with the stablecoins it accepts activated, and needs native gas
      for authorize/capture/void transactions. Its key goes in
      `MERCHANT_PRIVATE_KEY`.
@@ -150,7 +150,7 @@ component printed them dozens of times more. Everything else still logs its stat
 and [`src/lib/log.ts`](src/lib/log.ts) adds one line per gateway operation instead:
 
 ```
-rail0 siwe login role=seller address=0x1234abcd…ef9012 expires=2026-08-18T18:22:04Z
+rail0 siwe login role=merchant address=0x1234abcd…ef9012 expires=2026-08-18T18:22:04Z
 rail0 authorize ok payment=0x3f0a12bc…9c1b4d chain=84532 amount=7.09 USDC state=authorizing 812ms
 rail0 authorize refused payment=0x77de01aa…2b0f31 chain=84532 amount=2.60 USDC reason=does not cover the catalog price
 rail0 capture ok payment=0x3f0a12bc…9c1b4d chain=84532 amount=7.09 USDC state=capturing 640ms
@@ -303,7 +303,7 @@ Manual equivalent, and what to set up once:
    `MERCHANT_PRIVATE_KEY`, `ANTHROPIC_API_KEY`, `MERCHANT_TOKEN` and `BUYER_TOKEN`
    (without those two the deployed `/merchant` and the chat refuse every request —
    they fail closed, which on a public URL is the only safe default).
-3. Make sure the seller wallet is registered as a payee on that gateway with
+3. Make sure the merchant wallet is registered as a payee on that gateway with
    its tokens active and holds gas, and the buyer wallet holds the stablecoin.
 
 ## Notes for a real integration
@@ -334,12 +334,12 @@ Manual equivalent, and what to set up once:
   is why `/merchant` shows it only before the escrow exists — see
   [`priceCheckNote`](src/lib/order-ui.ts)), and a shop whose prices move at all needs
   the recorded order rather than this.
-- **The seller key in an env var** is demo-grade: in production it belongs in
+- **The merchant key in an env var** is demo-grade: in production it belongs in
   a proper secret store or signer. The buyer side already models the real
   thing — the key stays in the buyer's own wallet, and the gateway never
   custodies keys.
 - **Catalog** is a static `catalog.json`; the merchant identity is just the
-  seller wallet — no accounts to create.
+  merchant wallet — no accounts to create.
 - **The merchant gate is one shared token**, which is the right size for a
   single-operator template and not for a real back-office: capture/void and the
   order list are exactly as protected as that one secret. A real integration puts

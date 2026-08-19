@@ -16,7 +16,7 @@ const ROLES = [
     href: "/merchant",
     title: "Merchant",
     tagline: "Fulfil and settle",
-    body: "The back-office: orders with their live payment state. Fulfil an order to capture the escrow, or cancel it to void the authorization and hand the funds back. Signed with the seller's own key.",
+    body: "The back-office: orders with their live payment state. Fulfil an order to capture the escrow, or cancel it to void the authorization and hand the funds back. Signed with the merchant's own key.",
   },
 ];
 
@@ -72,7 +72,7 @@ export default function Home() {
           ))}
         </dl>
         <p className="mt-4 text-xs text-neutral-400">
-          Neither key ever leaves its own side: the buyer signs its payments, the seller signs its
+          Neither key ever leaves its own side: the buyer signs its payments, the merchant signs its
           transactions, and the gateway custodies nothing.
         </p>
       </div>

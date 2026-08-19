@@ -5,12 +5,12 @@ import { logEvent, short } from "./log";
 // Two server-side roles, and neither is a human buyer: a person signs in their own
 // wallet and their session is stashed with the checkout, not cached here.
 //
-//   seller — the merchant's backend, signing its own authorize/capture/void.
-//   agent  — this deployment's own buyer wallet, when it has one. It needs a session
-//            of its own to READ its spending history from the gateway (the budget
-//            check in lib/agent-budget); the checkout still logs in per checkout,
-//            because that flow's SIWE nonce is single-use and stashed with the order.
-type Role = "seller" | "agent";
+//   merchant — this storefront's backend, signing its own authorize/capture/void.
+//   agent    — this deployment's own buyer wallet, when it has one. It needs a session
+//              of its own to READ its spending history from the gateway (the budget
+//              check in lib/agent-budget); the checkout still logs in per checkout,
+//              because that flow's SIWE nonce is single-use and stashed with the order.
+type Role = "merchant" | "agent";
 
 interface Session {
   client: Rail0Client;
@@ -28,7 +28,7 @@ if (!globalSessions.__rail0Sessions) {
 const sessions = globalSessions.__rail0Sessions;
 
 function privateKeyFor(role: Role): string {
-  if (role === "seller") return env().MERCHANT_PRIVATE_KEY;
+  if (role === "merchant") return env().MERCHANT_PRIVATE_KEY;
   const key = env().BUYER_PRIVATE_KEY;
   // Callers reach the agent role only after checking it exists; this is the guard for
   // the path that forgets to, and it says which switch is off rather than failing as

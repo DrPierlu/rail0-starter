@@ -8,7 +8,7 @@ import { ShopError } from "./shop";
  * that MOVES MONEY (capture, void) or names the money (the order list).
  *
  * Nothing checked a credential before. Anyone who could reach the deployment
- * could capture or void any order — real escrowed funds, with the seller key
+ * could capture or void any order — real escrowed funds, with the merchant key
  * signing the transaction for them — and GET /api/shop/orders handed out the
  * 8-hex order ids needed to name one. The buyer's own routes are deliberately
  * NOT gated (the browser and the agent are the other deployable, with no

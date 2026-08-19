@@ -3,7 +3,7 @@ import { errorResponse } from "@/lib/http";
 import { authorizePayment } from "@/lib/shop";
 
 /**
- * The merchant escrows a signed payment — checkout step 3, seller half.
+ * The merchant escrows a signed payment — checkout step 3, merchant half.
  *
  * The body is empty on purpose: the id in the path is the only input, and everything
  * that matters about the payment (payee, amount, mode, what it claims to buy) is read

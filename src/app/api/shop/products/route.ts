@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const search = request.nextUrl.searchParams.get("search") ?? undefined;
     const matches = listProducts({ category, search });
     return NextResponse.json({
-      merchant: { name: merchantName(), address: addressFor("seller") },
+      merchant: { name: merchantName(), address: addressFor("merchant") },
       categories: listCategories(),
       total: matches.length,
       products: matches.slice(0, PAGE_LIMIT),
